@@ -2,7 +2,13 @@
 
 Owner: **Define projection content layer** (`01a13305-d81f-7c63-b810-5326284f56ac`).
 
-## GitHub initial publication — ready and edits paused, October 15
+## GitHub initial publication complete — final documentation window paused, October 15
+
+- Canvas published the private [adknate05/projection-mapper](https://github.com/adknate05/projection-mapper) repository on `main`: 245 reviewed files, initial commit `f2785b79e1b9b874f579038e6de144ef8309080b`, reported verified identical on GitHub. This task independently confirmed local HEAD/branch and the clean checkout before these docs edits. CLI account choice is resolved to adknate05; the initial snapshot/freeze is complete.
+- Canvas reports heartbeat `sync-projection-mapper-github` ACTIVE every ten minutes on this Mac only, syncing existing commits only when checkout/editor tasks are idle and clean. It does not set up the co-founder's computer, commit unfinished files or restart playback. Completed appropriately tested owned work is authorized for automatic commit/push per AGENTS.md. Co-founder username/invitation still pending.
+- [COLLABORATING.md](../COLLABORATING.md) explains per-clone setup and the daily workflow. This bounded update changes only coordination/README.md and this note. Both updated files are explicitly approved for the canvas task's coordinated documentation follow-up commit; agent edits are paused again until canvas releases the short final Git window. No staging, commit, push, sync or runtime action by this task.
+
+## Historical initial publication preparation
 
 - Agent/sensor-helper source, tests, isolated package manifests/locks, example configuration and owned architecture/coordination documents are ready for the canvas task's reviewed initial source commit/push. No unfinished source edits or active build/test jobs in this task. Edits are paused after this final activation-note reconciliation until the publication owner releases the window.
 - Confirmed Git ignores agent/.env, agent and helper dependencies/build output, native bin/obj, handoff/, runtime/ and .local-data/. Exclude credentials, private packages, local room/recording/media data and generated output; include the placeholder agent/.env.example. This check read ignore rules and file names, not credential contents; publication owner performs the final manifest/secret review.

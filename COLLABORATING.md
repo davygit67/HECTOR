@@ -21,7 +21,7 @@ Start from current code using `npm run repo:sync` while your checkout is clean a
 
 Codex is instructed to commit and push completed, tested changes in its own scope. It reviews the exact changed files, keeps other tasks' unfinished changes out, and runs the credential guard. Ordinary edits in other editors still need a deliberate commit. This does not continuously publish partially written files.
 
-The periodic Codex sync, once enabled on the owner's Mac, runs `npm run repo:sync` when the checkout's other tasks are idle. It does not install itself on your co-founder's computer. They can use the same command or request the same Codex automation in their clone.
+The Codex heartbeat **Sync Projection Mapper GitHub** runs every 10 minutes on the owner's Mac while Codex is running and the checkout's other tasks are idle. It invokes the same `npm run repo:sync` guard with the expected repository URL. It does not install itself on your co-founder's computer. They can use the same command or request the same Codex automation in their clone.
 
 The sync command:
 
