@@ -1,0 +1,21 @@
+node_modules/
+dist/
+dist-electron/
+.DS_Store
+*.log
+.local-data/
+handoff/
+runtime/
+
+# Machine-specific settings and credentials never belong in the shared source.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.codex/
+.agents/
+coverage/

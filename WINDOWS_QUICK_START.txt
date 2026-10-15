@@ -1,0 +1,44 @@
+PROJECTION MAPPER - PRIVATE WINDOWS HANDOFF
+
+START HERE
+1. Right-click the ZIP and select Extract All. Do not run from inside the ZIP.
+2. Open the extracted Projection Mapper Windows folder.
+3. Double-click Start Projection Mapper.cmd.
+4. Keep its window open while first-time setup downloads and builds the app.
+   The studio will open in your browser when ready. Later starts are faster.
+
+Use a 64-bit Intel/AMD Windows computer with an internet connection.
+Portable Node.js is included: no separate Node installation is needed.
+The AI assistant is preconfigured with Nate's API key. No key entry is needed.
+Internet is needed for AI requests, YouTube, and first-time setup.
+
+PROJECTOR
+Connect the projector over HDMI. Use Windows display settings to extend the
+desktop. In the studio, open the projection output, move that window onto
+the projector display, and make it full screen. Use Manual alignment to fit
+the corners to a wall or tabletop. The Hardware setup tab also has test grids.
+The scene starts fresh on this computer; Nate's browser data is not included.
+YouTube starts paused and muted; playback and sound are deliberate controls.
+
+KINECT CAN WAIT
+The projector, agent and manual canvas do not need the Kinect connected.
+When the powered Kinect adapter arrives, follow WINDOWS_SETUP.md and
+sensor-helper/README.md for the Microsoft SDK and native helper.
+The helper build still needs verification on actual Windows hardware.
+
+IF STARTUP FAILS
+Keep the error window open and send Nate its message. Check Windows.cmd gives
+a short diagnostic report. Setup Windows.cmd can repeat installation after
+the local studio has stopped. No launcher stops unrelated programs.
+The browser address is http://127.0.0.1:5173/ on this computer only.
+It is not a public website or a connection to Nate's Mac.
+
+PRIVATE CONFIGURATION
+This folder and ZIP contain Nate's API key in agent/.env as requested.
+Agent use is billed to that account. Share this handoff only with the intended
+friend; do not upload it to a public repository. The key is loaded by the local
+server, not embedded in the browser page.
+
+Verification: launcher logic was tested on Mac. The bundled runtime is the
+official Windows x64 Node.js build, checked against its published SHA-256.
+This package has not yet been run on the recipient's Windows computer.

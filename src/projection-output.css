@@ -1,0 +1,30 @@
+.projection-presentation{position:fixed;inset:0;z-index:10000;width:100%;height:100%;background:#000;overflow:hidden;cursor:none;color:#edf5ee}
+.projection-presentation[hidden]{display:none}
+.projection-presentation:fullscreen{width:100vw;height:100vh;background:#000}
+.projection-presentation::backdrop{background:#000}
+.projection-presentation .output-screen{position:absolute;inset:0;width:100%;height:100%;background:#000}
+.projection-presentation .output-fit{width:min(100vw,calc(100vh * 16 / 9));aspect-ratio:16/9}
+.projection-presentation .viewport.clean{background:#000}
+.projection-presentation .calibration-output{z-index:10003}
+.projection-presentation.controls-visible,.projection-presentation.controls-visible .output-screen{cursor:auto}
+.projection-controls{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:10002;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;max-width:calc(100% - 32px);width:max-content;background:#13221fee;border:1px solid #65847880;border-radius:12px;padding:16px 20px;box-shadow:0 8px 32px #0006;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s}
+.controls-visible .projection-controls{opacity:1;visibility:visible;pointer-events:auto}
+.projection-controls>div{display:flex;flex-direction:column;gap:6px;max-width:430px}
+.projection-controls strong{font-size:13px;font-weight:600}.projection-controls span{font-size:12px;line-height:1.5;color:#b9ccbf}.projection-controls p{flex-basis:100%;font-size:12px;line-height:1.5;color:#ffdb9d}
+.projection-controls .secondary{color:#25342e}
+.projection-launch{padding:16px;background:#edf2e7;border-top:1px solid #d7dfce;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.projection-launch strong{font-size:13px;color:#315f4c}.projection-launch p{font-size:11px;color:#78856e;line-height:1.6;margin-top:5px;max-width:460px}.projection-launch>div:last-child{display:flex;gap:8px;flex-wrap:wrap}
+.spatial-studio .header-actions{gap:12px;flex-wrap:wrap;justify-content:flex-end}
+
+/* Overlays never reserve space: alignment and projection use the identical output-fit. */
+.projection-presentation:focus{outline:none}
+.projection-presentation.alignment-editing,.projection-presentation.alignment-editing .output-screen{cursor:auto}
+.projection-presentation .youtube-position{pointer-events:none}
+.projection-presentation .corner-handle{width:24px;height:24px;border:0}
+.projection-presentation .corner-handle>span{font-size:12px;top:31px;text-shadow:0 1px 3px #000}
+.projection-presentation.toolbar-top .projection-controls{bottom:auto;top:24px}
+.projection-controls .projection-mode-buttons{flex-direction:row;gap:6px}
+.projection-grid-toggle{display:flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
+.projection-grid-toggle input{accent-color:#a3d2b2;width:16px;height:16px}
+
+.projection-controls[hidden]{display:none}

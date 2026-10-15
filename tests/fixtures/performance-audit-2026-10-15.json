@@ -1,0 +1,189 @@
+{
+  "date": "2026-10-15",
+  "scope": "Silent synthetic fixtures on this Mac; no user media or physical display test.",
+  "cpu": {
+    "kind": "synthetic CPU processing only; excludes GPU readback, video decode, socket transfer and final display",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M3 Max",
+    "electron": "44.7.0",
+    "samples": 60,
+    "raster": [
+      1920,
+      1080
+    ],
+    "jpegBytes": 316458,
+    "jsonBytes": 443987,
+    "copiedBytesPerFrame": 8377344,
+    "beforeMilliseconds": {
+      "resize": {
+        "median": 0.874,
+        "p95": 1.054
+      },
+      "bitmap": {
+        "median": 0.687,
+        "p95": 0.802
+      },
+      "analysis": {
+        "median": 6.725,
+        "p95": 12.662
+      },
+      "jpeg": {
+        "median": 9.95,
+        "p95": 10.272
+      },
+      "textEncode": {
+        "median": 0.195,
+        "p95": 0.28
+      },
+      "textDecode": {
+        "median": 0.13,
+        "p95": 0.145
+      },
+      "total": {
+        "median": 18.516,
+        "p95": 24.348
+      },
+      "light": {
+        "median": 6.366,
+        "p95": 11.541
+      }
+    },
+    "optimized": [
+      {
+        "scheduledFps": 30,
+        "samples": 150,
+        "analyzed": 50,
+        "jpegUnchanged": true,
+        "cpuMs": {
+          "median": 10.221,
+          "p95": 18.062
+        },
+        "encodeMs": {
+          "median": 9.836,
+          "p95": 10.112
+        },
+        "meanCpuMs": 12.611
+      },
+      {
+        "scheduledFps": 60,
+        "samples": 150,
+        "analyzed": 25,
+        "jpegUnchanged": true,
+        "cpuMs": {
+          "median": 10.063,
+          "p95": 17.621
+        },
+        "encodeMs": {
+          "median": 9.746,
+          "p95": 10.071
+        },
+        "meanCpuMs": 11.236
+      }
+    ]
+  },
+  "bitmapCapture": {
+    "kind": "Synthetic offscreen bitmap capture + processing, first second excluded; no receiver/network/display",
+    "platform": "darwin",
+    "electron": "44.7.0",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "results": [
+      {
+        "targetFps": 30,
+        "frames": 190,
+        "processedFps": 29.95,
+        "gapP95Ms": 43.769,
+        "processingMedianMs": 9.829,
+        "processingP95Ms": 19.372,
+        "analyzed": 60
+      },
+      {
+        "targetFps": 60,
+        "frames": 383,
+        "processedFps": 59.98,
+        "gapP95Ms": 26.106,
+        "processingMedianMs": 9.069,
+        "processingP95Ms": 17.781,
+        "analyzed": 61
+      }
+    ]
+  },
+  "gpuTransfer": {
+    "supported": true,
+    "mode": "sandboxed Electron GPU texture \u2192 VideoFrame \u2192 Canvas; silent synthetic animation",
+    "platform": "darwin",
+    "electron": "44.7.0",
+    "gpu": {
+      "2d_canvas": "enabled",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "enabled_on",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "enabled",
+      "webgl": "enabled",
+      "webgpu": "enabled",
+      "webnn": "disabled_off"
+    },
+    "resolution": [
+      1920,
+      1080
+    ],
+    "targetFps": 60,
+    "maxInFlight": 2,
+    "captured": 390,
+    "delivered": 390,
+    "droppedWhileBusy": 0,
+    "elapsedMs": 6476,
+    "receivedFps": 60.18,
+    "gapP95Ms": 17.399999976158142,
+    "transferMs": {
+      "median": 0.297,
+      "p95": 0.364
+    },
+    "lastDrawMs": 0.10000002384185791,
+    "pixelCheck": {
+      "pixels": 245760,
+      "differentChannels": 0,
+      "maxError": 0,
+      "codedWidth": 1920,
+      "codedHeight": 1080,
+      "colorSpace": {
+        "fullRange": true,
+        "matrix": "rgb",
+        "primaries": "bt709",
+        "transfer": "iec61966-2-1"
+      }
+    },
+    "limitations": "Opaque 8-bit SDR sRGB on this Mac only. Not YouTube decode, HDR, Windows or physical projector latency. One precision readback is included in timing. Texture lifetime and production integration remain."
+  },
+  "nativeIntegration": {
+    "passed": true,
+    "sourceResolution": [
+      1920,
+      1080
+    ],
+    "targetFps": 30,
+    "frames": 3,
+    "matchingBlueOrangeColors": true,
+    "pointerForwarding": true,
+    "mutedBeforeLoad": true,
+    "explicitUnmuteOnly": true,
+    "sourceRetainedAcrossStyleChange": true,
+    "pausedAnalysisDemandRefresh": true,
+    "blockedSinkSkipsProcessing": true,
+    "retryAndRemovalCleanedUp": true
+  },
+  "studioScheduling": {
+    "idleCommits": 0,
+    "runningCommitsIn900ms": 7,
+    "expiredCommits": 0
+  }
+}

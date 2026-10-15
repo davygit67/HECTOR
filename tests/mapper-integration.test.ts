@@ -1,0 +1,75 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { initialScene, readScene, reduceScene } from '../src/shared/domain';
+import { MEDIA_DEFAULTS, mediaBounds, mediaTime } from '../src/shared/mediaContent';
+import { DISPLAY_DEFAULTS, layerOpacity, layerVisible, renderWidth, surfaceLayers } from '../src/shared/layers';
+import { manualAlignment } from '../src/shared/manualAlignment';
+import { isOutputCalibrationCommand } from '../src/shared/outputPermissions';
+import { defaultSpec, type MediaContent } from '../src/shared/content';
+import { lightProtectedBounds } from '../src/shared/roomLight';
+
+const config = { ...MEDIA_DEFAULTS, assetId: 'test-asset', mediaType: 'video' as const, fileName: 'test.webm', mimeType: 'video/webm', width: 1920, height: 1080, duration: 60 };
+const create = () => reduceScene(initialScene(1000), { type: 'content.create', id: 'video', title: 'Local video', surfaceId: 'wall', spec: { kind: 'media', config } }, 1000);
+test('local media persists metadata, starts paused/muted and retains layer and source through edits', () => {
+  let scene = create(); let media = scene.contents[0] as MediaContent;
+  assert.equal(media.state.clock.running, false); assert.equal(media.config.muted, true);
+  scene = reduceScene(scene, { type: 'layer.configure', id: 'video', settings: { opacity: .6, visible: false } });
+  scene = reduceScene(scene, { type: 'content.update', id: 'video', title: 'Renamed', spec: { kind: 'media', config: { ...config, contrast: 1.3 } } });
+  media = scene.contents[0] as MediaContent;
+  assert.equal(media.config.assetId, 'test-asset'); assert.equal(layerOpacity(media), .6); assert.equal(layerVisible(media), false);
+  assert.deepEqual(readScene(JSON.parse(JSON.stringify(scene))), scene);
+  assert.deepEqual(readScene(initialScene(1000)), initialScene(1000));
+});
+test('play, rate change, seek, pause and loop preserve a continuous shared media timeline', () => {
+  let scene = reduceScene(create(), { type: 'content.action', id: 'video', action: 'start' }, 1000);
+  assert.equal(mediaTime(config, (scene.contents[0] as MediaContent).state.clock, 6000), 5);
+  scene = reduceScene(scene, { type: 'content.update', id: 'video', spec: { kind: 'media', config: { ...config, playbackRate: 2 } } }, 6000);
+  let media = scene.contents[0] as MediaContent;
+  assert.equal(mediaTime(media.config, media.state.clock, 11000), 15);
+  scene = reduceScene(scene, { type: 'media.seek', id: 'video', seconds: 59 }, 11000);
+  media = scene.contents[0] as MediaContent;
+  assert.equal(mediaTime(media.config, media.state.clock, 12000), 1);
+  scene = reduceScene(scene, { type: 'content.action', id: 'video', action: 'pause' }, 12000);
+  media = scene.contents[0] as MediaContent;
+  assert.equal(mediaTime(media.config, media.state.clock, 99999), 1);
+  assert.throws(() => reduceScene(scene, { type: 'media.seek', id: 'video', seconds: Infinity }));
+  const still = reduceScene(scene, { type: 'content.update', id: 'video', spec: { kind: 'media', config: { ...config, assetId: 'image', mediaType: 'image', duration: 0 } } });
+  assert.throws(() => reduceScene(still, { type: 'content.action', id: 'video', action: 'start' }), /Images/);
+});
+test('front/back ordering includes videos, notes and timers with a pinned art background', () => {
+  let scene = create();
+  scene = reduceScene(scene, { type: 'content.create', id: 'note', title: 'Note', surfaceId: 'wall', spec: defaultSpec('note') });
+  scene = reduceScene(scene, { type: 'content.create', id: 'art', title: 'Art', surfaceId: 'wall', spec: defaultSpec('art') });
+  scene = reduceScene(scene, { type: 'timer.create', id: 'timer', title: 'Timer', surfaceId: 'wall', durationMs: 60000 });
+  assert.deepEqual(surfaceLayers(scene, 'wall').map(c => c.id), ['art', 'video', 'note', 'timer']);
+  scene = reduceScene(scene, { type: 'layer.reorder', id: 'video', direction: 'front' });
+  assert.deepEqual(surfaceLayers(scene, 'wall').map(c => c.id), ['art', 'note', 'timer', 'video']);
+  scene = reduceScene(scene, { type: 'layer.reorder', id: 'timer', direction: 'back' });
+  assert.deepEqual(surfaceLayers(scene, 'wall').map(c => c.id), ['art', 'timer', 'note', 'video']);
+  scene = reduceScene(scene, { type: 'layer.configure', id: 'note', settings: { opacity: .2, locked: true } });
+  assert.deepEqual(surfaceLayers(scene, 'wall').map(c => c.id), ['art', 'timer', 'note', 'video']);
+  assert.throws(() => reduceScene(scene, { type: 'content.move', id: 'note', bounds: scene.contents.find(c => c.id === 'note')!.bounds }), /Unlock/);
+  assert.throws(() => reduceScene(scene, { type: 'layer.reorder', id: 'art', direction: 'front' }), /background/);
+  assert.deepEqual(readScene(scene), scene);
+});
+test('invalid display/layer/media settings reject atomically and output permissions remain narrow', () => {
+  const scene = create(), before = structuredClone(scene);
+  for (const settings of [{ opacity: NaN }, { order: 3 }, { visible: 'no' }, { opacity: -1 }]) assert.throws(() => reduceScene(scene, { type: 'layer.configure', id: 'video', settings } as any));
+  for (const settings of [{ brightness: 3 }, { quality: 'bad' }, { blackout: 1 }]) assert.throws(() => reduceScene(scene, { type: 'display.configure', settings } as any));
+  for (const patch of [{ assetId: '../secret' }, { playbackRate: 0 }, { width: 0 }, { loop: 'yes' }, { rotation: 45 }]) assert.throws(() => reduceScene(scene, { type: 'content.update', id: 'video', spec: { kind: 'media', config: { ...config, ...patch } } } as any));
+  assert.deepEqual(scene, before);
+  for (const type of ['display.configure', 'layer.configure', 'layer.reorder', 'media.seek', 'content.create']) assert.equal(isOutputCalibrationCommand({ type }), false);
+  const styled = reduceScene(scene, { type: 'display.configure', settings: { quality: 'fast', blackout: true } });
+  assert.deepEqual(styled.display, { ...DISPLAY_DEFAULTS, quality: 'fast', blackout: true }); assert.equal(renderWidth(styled, true), 1280);
+  assert.deepEqual(styled.contents, scene.contents); assert.deepEqual(styled.manualOutput, scene.manualOutput);
+});
+test('uploaded-media alignment follows actual rotated fit and hidden layers stop masking room light', () => {
+  let scene = reduceScene(create(), { type: 'manual.target', surfaceId: 'wall' });
+  const media = scene.contents[0] as MediaContent;
+  assert.deepEqual(manualAlignment(scene).bounds, mediaBounds(media.bounds, media.config));
+  const rotated = { ...config, rotation: 90 as const };
+  assert.ok(mediaBounds(media.bounds, rotated).w < mediaBounds(media.bounds, config).w);
+  assert.equal(lightProtectedBounds(scene, 'wall').length, 1);
+  scene = reduceScene(scene, { type: 'layer.configure', id: 'video', settings: { visible: false } });
+  assert.equal(manualAlignment(scene).video, undefined); assert.equal(lightProtectedBounds(scene, 'wall').length, 0);
+});

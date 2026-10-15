@@ -1,0 +1,60 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { createBacklightAnalyzer } from '../src/shared/backlight';
+import { FULL_PICTURE } from '../src/shared/activePicture';
+import { initialScene, reduceScene } from '../src/shared/domain';
+import { configureMedia, startNativeMedia, readMediaImage, readMediaPicture } from '../src/nativeMedia';
+import { paintContent, paintSceneBacklight } from '../src/contentPainter';
+import { youtubePictureBounds } from '../src/shared/youtube';
+import type { MediaEvent, MediaFrame } from '../src/shared/media';
+import type { YouTubeContent } from '../src/shared/content';
+import '../src/styles.css';
+import '../src/spatial.css';
+
+let emit: (event: MediaEvent) => void = () => {};
+window.projectionMedia={subscribe: listener=>{emit=listener;return()=>{}},snapshot:async()=>[],command:async()=>{},input:async()=>{}};
+const { Stage } = await import('../src/SurfaceEditor');
+const stop=startNativeMedia();await Promise.resolve();
+let scene=reduceScene(initialScene(),{type:'content.create',id:'matte-check',surfaceId:'wall',title:'Silent picture-edge fixture',spec:{kind:'youtube',config:{videoId:'M7lc1UVf-VE',startSeconds:0,backlight:true,backlightSettings:{intensity:1.4,spread:.3,smoothingMs:0}}}});
+scene=reduceScene(scene,{type:'content.move',id:'matte-check',bounds:{x:.2,y:.1,w:.6,h:.8}});
+scene=reduceScene(scene,{type:'manual.target',surfaceId:'wall'});
+scene={...scene,manualOutput:{...scene.manualOutput,quad:[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}]},showGrid:false};
+configureMedia(scene);
+const video=scene.contents[0] as YouTubeContent,wall=scene.surfaces.find(s=>s.id==='wall')!;
+const source=document.createElement('canvas');source.width=1920;source.height=1080;
+const sc=source.getContext('2d')!,small=document.createElement('canvas');small.width=192;small.height=108;
+const smallCtx=small.getContext('2d')!,analyze=createBacklightAnalyzer();
+sc.fillStyle='#000';sc.fillRect(0,0,1920,1080);sc.fillStyle='#0066ff';sc.fillRect(0,137,960,806);sc.fillStyle='#ff5500';sc.fillRect(960,137,960,806);
+// A black object within the picture must remain opaque, never color-keyed away.
+sc.fillStyle='#000';sc.fillRect(850,400,220,250);
+smallCtx.drawImage(source,0,0,192,108);
+const raw=sc.getImageData(0,0,1920,1080),tiny=smallCtx.getImageData(0,0,192,108);
+analyze(tiny,0,raw);const colors=analyze(tiny,700,raw),picture=analyze.picture();
+const jpeg=new Uint8Array(await(await new Promise<Blob>(resolve=>source.toBlob(b=>resolve(b!),'image/jpeg',.95))).arrayBuffer());
+const state={contentId:video.id,generation:1,ready:true,playing:false,hasPlayed:true,muted:true,status:'Paused · silent generated fixture',currentTime:0,duration:0};
+const frame:MediaFrame={contentId:video.id,generation:1,sequence:1,width:1920,height:1080,jpeg,sample:{colors,picture,sampledAt:Date.now(),costMs:1,dark:false}};
+emit({type:'state',state});emit({type:'frame',frame});
+for(let attempt=0;attempt<100&&!readMediaImage(video.id);attempt++)await new Promise(r=>setTimeout(r,20));
+const canvas=document.createElement('canvas');canvas.width=960;canvas.height=540;const ctx=canvas.getContext('2d')!;
+const at=(x:number,y:number)=>Array.from(ctx.getImageData(x,y,1,1).data);
+paintContent(ctx,video,960,540,Date.now());
+const rawPixels={padding:at(300,90),bar:at(300,140),picture:at(300,200),blackObject:at(480,270)};
+const composites=[];
+for(const roomFill of [0,.01,1]){
+  video.config.backlightSettings={...video.config.backlightSettings!,roomFill};
+  ctx.fillStyle='#000';ctx.fillRect(0,0,960,540);
+  paintSceneBacklight(ctx,scene,wall,960,540);paintContent(ctx,video,960,540,Date.now());
+  composites.push({roomFill,padding:at(300,90),bar:at(300,140),seam:at(300,148),picture:at(300,200),blackObject:at(480,270)});
+}
+const geometry=youtubePictureBounds(video.bounds,picture),before=JSON.stringify(scene);
+// A replacement source may not inherit the old crop, even if an old JPEG arrives late.
+emit({type:'state',state:{...state,generation:2}});
+const reset=JSON.stringify(readMediaPicture(video.id))===JSON.stringify(FULL_PICTURE)&&!readMediaImage(video.id);
+emit({type:'frame',frame});await new Promise(r=>setTimeout(r,40));
+const lateIgnored=!readMediaImage(video.id);
+emit({type:'frame',frame:{...frame,generation:2}});
+for(let attempt=0;attempt<100&&!readMediaImage(video.id);attempt++)await new Promise(r=>setTimeout(r,20));
+const checks={transparentPadding:rawPixels.padding[3]===0,transparentBars:rawPixels.bar[3]===0,opaqueBlack:rawPixels.blackObject[3]===255&&rawPixels.blackObject.slice(0,3).every(c=>c<3),noZoom:rawPixels.picture[2]>250,glowMeetsPicture:composites.every(p=>p.bar[2]>70&&p.padding[2]>20&&p.seam[2]>80),imageUnchanged:composites.every(p=>JSON.stringify(p.picture)===JSON.stringify(rawPixels.picture)&&JSON.stringify(p.blackObject)===JSON.stringify(rawPixels.blackObject)),reset,lateIgnored,sceneUnchanged:JSON.stringify(scene)===before};
+createRoot(document.getElementById('root')!).render(<main style={{padding:24,background:'#101918',color:'#ecf2de'}}><h1>Picture-edge backlight check</h1><p>Silent generated frame. No YouTube playback or screen capture.</p><div style={{maxWidth:960}}><Stage scene={scene} now={Date.now()} mode="align" alignmentEditing send={()=>{}} /></div><pre id="results">{JSON.stringify({passed:Object.values(checks).every(Boolean),checks,picture,geometry,rawPixels,composites},null,2)}</pre></main>);
+const heartbeat=setInterval(()=>emit({type:'state',state:{...state,generation:2}}),1000);
+window.addEventListener('beforeunload',()=>{clearInterval(heartbeat);stop();});
