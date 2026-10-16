@@ -47,6 +47,19 @@ export function moveAlignmentCorner(quad: Quad, bounds: Bounds, index: number, p
   } catch { return null; }
 }
 
+/** Translate selected picture anchors together, clamping one shared delta to preserve their spacing. */
+export function moveAlignmentCorners(quad: Quad, bounds: Bounds, indices: readonly number[], delta: Point): Quad | null {
+  if (!indices.length || indices.some(index => !Number.isInteger(index) || index < 0 || index > 3)
+    || !Number.isFinite(delta.x) || !Number.isFinite(delta.y)) return null;
+  try {
+    const corners = alignmentCorners(quad, bounds), selected = new Set(indices);
+    const points = corners.filter((_, index) => selected.has(index));
+    const shift = (axis: 'x' | 'y') => clamp(delta[axis], Math.min(0, -Math.min(...points.map(p => p[axis]))), Math.max(0, 1 - Math.max(...points.map(p => p[axis]))));
+    const dx = shift('x'), dy = shift('y');
+    return surfaceQuadFromAnchors(bounds, corners.map((p, index) => selected.has(index) ? { x: p.x + dx, y: p.y + dy } : p) as Quad);
+  } catch { return null; }
+}
+
 /** Clamp movement to the video, allowing its surrounding glow to be cropped at the output edge. */
 export function moveAlignment(quad: Quad, bounds: Bounds, delta: Point): Quad {
   if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) throw new Error('Invalid projection movement.');

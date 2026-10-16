@@ -1,5 +1,11 @@
 # Canvas task status · 0.3 ready
 
+## Manual alignment edge and group dragging · October 16 · complete
+
+Added draggable outline edges (each translates its two endpoints) and Shift-click corner selection in the shared Stage used by Studio and full-screen alignment. Dragging any selected corner moves the whole selection with one shared displacement; unselected picture anchors stay fixed, output-boundary clamping preserves spacing, and folded/horizon-crossing projections are rejected. Shift-click again removes a point; clicking an unselected point selects it alone. Yellow corner/edge highlights expose the selection. Arrow keys nudge the group, Shift + arrows moves 10 pixels, Alt-drag is fine adjustment. Selection is local editing state, not persisted geometry; existing video-picture anchors, whole-picture dragging, release-only calibration commits and preview broadcast remain. Updated integrated control hints and README. No agent/schema/dependency changes.
+
+Validation: all 178 root tests and production build pass (existing Vite extension/chunk warnings). The asset-server test needed localhost networking outside the sandbox; the complete permitted rerun passed. Silent synthetic-video browser fixture exercised actual top/right edge drags, Shift add/remove including opposite corners, group dragging and keyboard nudges in Studio and actual browser fullscreen. Selected displacements matched to floating-point precision; others stayed fixed; handles stayed within 0.3 screen pixels of rendered video corners. Switching to Project kept the exact quad and removed handles/grid/toolbar. Fixture recorded zero media commands and was closed. Live user scene/playback and host PID27137 were not restarted or manipulated. Initial clean/idle sync was up-to-date; source is served by the existing local Studio. Physical Windows/projector verification remains untested.
+
 ## GitHub collaboration setup · October 15 · published
 
 Publication freezes are released with this documentation commit. Owners may resume normal scoped work; no application source/runtime changes are pending in this publication window. This release supersedes the temporary pause recorded in the co-owner's accompanying approval notes.

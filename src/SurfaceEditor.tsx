@@ -1,5 +1,5 @@
 import { readMediaPicture } from './nativeMedia';
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { formatTime, remaining, getSurface, type Command, type Scene, type Timer } from './shared/domain';
 import { surfaceClipPath } from './shared/spatial';
 import { YouTubePlayer } from './YouTubePlayer';
@@ -8,7 +8,7 @@ import { SurfaceArtwork } from './SpatialView';
 import { GAME_GRID, gameTarget, type ContentInstance } from './shared/content';
 import { clamp, cssMatrix, FULL_QUAD, HEIGHT, WIDTH, type Bounds, type Point, type Quad } from './shared/geometry';
 
-import { manualAlignment, moveAlignment, moveAlignmentCorner } from './shared/manualAlignment';
+import { manualAlignment, moveAlignment, moveAlignmentCorner, moveAlignmentCorners } from './shared/manualAlignment';
 import { LayerArtwork } from './LayerArtwork';
 import { layerOpacity, layerVisible, surfaceLayers } from './shared/layers';
 import './mapper-controls.css';
@@ -17,6 +17,8 @@ import { useAlignmentPreview } from './alignmentPreview';
 type Mode = 'arrange' | 'align';
 const corners = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
 const cornerTags = ['TL', 'TR', 'BR', 'BL'];
+const edges = ['top', 'right', 'bottom', 'left'];
+const arrowSteps: Record<string, Point> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
 
 function TimerFace({ timer, now }: { timer: Timer; now: number }) {
   const left = remaining(timer, now);
@@ -31,11 +33,12 @@ function TimerFace({ timer, now }: { timer: Timer; now: number }) {
   </div>;
 }
 
-interface Drag { kind: 'corner' | 'projection' | 'move' | 'resize'; start: Point; quad: Quad; anchorBounds: Bounds; corner?: number; timer?: Timer; content?: ContentInstance; pointerId: number; anchors: Quad }
+interface Drag { kind: 'corner' | 'edge' | 'projection' | 'move' | 'resize'; start: Point; quad: Quad; anchorBounds: Bounds; selected?: number[]; timer?: Timer; content?: ContentInstance; pointerId: number }
 export function Stage({ scene, now, mode, send, clean = false, playing = false, active = true, alignmentEditing = false, alignmentSession }: { scene: Scene; now: number; mode: Mode; send?: (command: Command) => void; clean?: boolean; playing?: boolean; active?: boolean; alignmentEditing?: boolean; alignmentSession?: string }) {
   const viewport = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
   const [previewQuad, setPreviewQuad] = useState<Quad | null>(null);
+  const [selectedCorners, setSelectedCorners] = useState<number[]>([]);
   const sharedPreview = useAlignmentPreview(scene.manualOutput.surfaceId, scene.manualOutput.quad, alignmentSession);
   const previewFrame = useRef<number | null>(null), latestQuad = useRef<Quad | null>(null);
   const queueQuad = (quad: Quad) => {
@@ -80,31 +83,41 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
   const effectiveQuad = previewQuad ?? sharedPreview.remote ?? scene.manualOutput.quad;
   const quad = aligning ? effectiveQuad : FULL_QUAD;
   const alignment = manualAlignment({ ...scene, manualOutput: { ...scene.manualOutput, quad: effectiveQuad } }, readMediaPicture);
+  useLayoutEffect(() => { setSelectedCorners([]); }, [scene.manualOutput.surfaceId, alignment.video?.id, mode, active, alignmentEditing]);
   const layers = surfaceLayers(scene, surface.id);
   const zIndex = (id: string) => layers.findIndex(c => c.id === id) + 1;
   const point = (event: PointerEvent): Point => {
     const r = viewport.current!.getBoundingClientRect();
     return { x: (event.clientX - r.left) / r.width, y: (event.clientY - r.top) / r.height };
   };
-  const start = (event: PointerEvent<HTMLElement>, kind: Drag['kind'], timer?: Timer, corner?: number, content?: ContentInstance) => {
-    if (!send || (clean && !(alignmentEditing && (kind === 'corner' || kind === 'projection'))) || event.button !== 0) return;
+  const start = (event: PointerEvent<HTMLElement | SVGElement>, kind: Drag['kind'], timer?: Timer, corner?: number, content?: ContentInstance) => {
+    if (!send || (clean && !(alignmentEditing && (kind === 'corner' || kind === 'edge' || kind === 'projection'))) || event.button !== 0 || drag.current) return;
     if ((timer ?? content)?.layer?.locked) return;
-    event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
-    if (kind === 'projection' || kind === 'corner') event.currentTarget.focus({ preventScroll: true });
-    drag.current = { kind, quad: structuredClone(quad), anchors: alignment.corners, anchorBounds: { ...alignment.bounds }, timer: timer ? structuredClone(timer) : undefined, content: content ? structuredClone(content) : undefined, corner, start: point(event), pointerId: event.pointerId };
+    event.preventDefault(); event.stopPropagation();
+    let selected: number[] | undefined;
+    if (kind === 'corner') {
+      selected = event.shiftKey ? (selectedCorners.includes(corner!) ? selectedCorners.filter(i => i !== corner) : [...selectedCorners, corner!])
+        : selectedCorners.includes(corner!) ? selectedCorners : [corner!];
+      setSelectedCorners(selected);
+    } else if (kind === 'edge') { selected = [corner!, (corner! + 1) % 4]; setSelectedCorners(selected); }
+    else if (kind === 'projection') setSelectedCorners([]);
+    if (kind === 'projection' || kind === 'corner' || kind === 'edge') event.currentTarget.focus({ preventScroll: true });
+    // Shift-clicking a selected point removes it without starting a drag of the remaining selection.
+    if (kind === 'corner' && !selected!.includes(corner!)) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { kind, quad: structuredClone(quad), anchorBounds: { ...alignment.bounds }, timer: timer ? structuredClone(timer) : undefined, content: content ? structuredClone(content) : undefined, selected, start: point(event), pointerId: event.pointerId };
     if (timer) send({ type: 'timer.select', id: timer.id });
     if (content) send({ type: 'content.select', id: content.id });
   };
   const move = (event: PointerEvent) => {
     const d = drag.current;
     if (!d || event.pointerId !== d.pointerId || !send || (clean && !alignmentEditing)) return;
-    const p = point(event), precision = event.altKey ? .01 : event.shiftKey ? .1 : 1;
+    const p = point(event), precision = event.altKey ? .01 : event.shiftKey && d.kind === 'projection' ? .1 : 1;
     const delta = { x: (p.x - d.start.x) * precision, y: (p.y - d.start.y) * precision };
     if (d.kind === 'projection') {
       queueQuad(moveAlignment(d.quad, d.anchorBounds, delta));
-    } else if (d.kind === 'corner') {
-      const anchor = d.anchors[d.corner!];
-      const next = moveAlignmentCorner(d.quad, d.anchorBounds, d.corner!, { x: anchor.x + delta.x, y: anchor.y + delta.y });
+    } else if (d.kind === 'corner' || d.kind === 'edge') {
+      const next = moveAlignmentCorners(d.quad, d.anchorBounds, d.selected!, delta);
       if (next) queueQuad(next);
     } else {
       const item = d.content ?? d.timer!, b = item.bounds, dx = p.x - d.start.x, dy = p.y - d.start.y;
@@ -113,6 +126,13 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
         : { ...b, w: clamp(b.w + dx, minimum.w, 1 - b.x), h: clamp(b.h + dy, minimum.h, 1 - b.y) };
       queueDrag({ type: d.content ? 'content.move' : 'timer.move', id: item.id, bounds });
     }
+  };
+  const nudgeCorners = (event: KeyboardEvent, selected: number[]) => {
+    const step = arrowSteps[event.key]; if (!step || !send || drag.current) return;
+    event.preventDefault(); setSelectedCorners(selected);
+    const amount = event.altKey ? .1 : event.shiftKey ? 10 : 1;
+    const next = moveAlignmentCorners(effectiveQuad, alignment.bounds, selected, { x: step.x * amount / WIDTH, y: step.y * amount / HEIGHT });
+    if (next) send({ type: 'calibration.set', quad: next });
   };
   return <><div hidden={!active} className={`viewport ${clean ? 'clean' : ''} ${!aligning ? 'layout-view' : ''}`} ref={viewport}
     onPointerMove={move} onPointerUp={finishDrag} onPointerCancel={finishDrag} onLostPointerCapture={finishDrag}>
@@ -161,15 +181,27 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
           event.preventDefault(); const amount = event.shiftKey ? 10 : 1;
           send({ type: 'calibration.set', quad: moveAlignment(scene.manualOutput.quad, alignment.bounds, { x: step.x * amount / WIDTH, y: step.y * amount / HEIGHT }) });
         }} />}
-      <svg className="quad-outline" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true"><polygon points={alignment.corners.map(p => `${p.x * WIDTH},${p.y * HEIGHT}`).join(' ')} /></svg>
-      {alignment.corners.map((p, i) => <button key={i} className="corner-handle" aria-label={`Move ${corners[i]} corner`} title={`${corners[i]} · drag or use arrow keys`}
+      <svg className="quad-outline" viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
+        <polygon aria-hidden="true" points={alignment.corners.map(p => `${p.x * WIDTH},${p.y * HEIGHT}`).join(' ')} />
+        {send && alignment.corners.map((p, i) => {
+          const end = alignment.corners[(i + 1) % 4], selected = [i, (i + 1) % 4];
+          return <g key={i} className={'alignment-edge' + (selected.every(index => selectedCorners.includes(index)) ? ' selected' : '')}>
+            <line className="alignment-edge-hit" x1={p.x * WIDTH} y1={p.y * HEIGHT} x2={end.x * WIDTH} y2={end.y * HEIGHT}
+              role="button" tabIndex={0} aria-label={`Move ${edges[i]} edge`}
+              onPointerDown={event => start(event, 'edge', undefined, i)} onKeyDown={event => nudgeCorners(event, selected)}>
+              <title>Drag the {edges[i]} edge to move both corners together. Arrow keys nudge.</title>
+            </line>
+            <line className="alignment-edge-highlight" aria-hidden="true" x1={p.x * WIDTH} y1={p.y * HEIGHT} x2={end.x * WIDTH} y2={end.y * HEIGHT} />
+          </g>;
+        })}
+      </svg>
+      {alignment.corners.map((p, i) => <button key={i} className={'corner-handle' + (selectedCorners.includes(i) ? ' selected' : '')} aria-pressed={selectedCorners.includes(i)} aria-label={`Move ${corners[i]} corner`} title={`${corners[i]} · Shift-click to add/remove selection; drag selected corners together. Alt-drag for precision.`}
         style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} onPointerDown={event => start(event, 'corner', undefined, i)}
         onKeyDown={event => {
-          const steps: Record<string, Point> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
-          if (!steps[event.key]) return;
-          event.preventDefault(); const step = steps[event.key], amount = event.altKey ? .1 : event.shiftKey ? 10 : 1;
-          const next = moveAlignmentCorner(scene.manualOutput.quad, alignment.bounds, i, { x: p.x + step.x * amount / WIDTH, y: p.y + step.y * amount / HEIGHT });
-          if (next) send?.({ type: 'calibration.set', quad: next });
+          if (event.key === ' ' || event.key === 'Enter') {
+            event.preventDefault(); setSelectedCorners(previous => event.shiftKey ? previous.includes(i) ? previous.filter(index => index !== i) : [...previous, i] : [i]); return;
+          }
+          nudgeCorners(event, selectedCorners.includes(i) ? selectedCorners : [i]);
         }}><span>{cornerTags[i]}</span></button>)}
     </>}
     {!clean && !scene.timers.some(t => t.surfaceId === surface.id) && !scene.contents.some(c => c.surfaceId === surface.id) && !scene.showGrid && <div className="empty-stage"><span className="empty-symbol">＋</span><strong>Your surface is ready.</strong><span>Add content to start making it useful.</span></div>}
@@ -231,6 +263,7 @@ export function CalibrationControls({ scene, send }: { scene: Scene; send: (c: C
     <span className="eyebrow">FOUR-CORNER ALIGNMENT</span>
     <h3>{alignment.video ? "Position the video." : "Fit the light to the surface."}</h3>
     <p className="hint">{alignment.video ? `Corners follow “${alignment.video.title}”. Drag the video to move it, or a corner to reshape it. Its backlight and the rest of this surface follow along.` : "Drag the image to move it without resizing. Drag a corner to change its shape. Content follows the same perspective."}</p>
+    <p className="hint">Drag an edge to move both ends. Shift-click corners to select a group, then drag any selected corner; their spacing stays fixed. Shift-click again to deselect. Arrow keys nudge the group; Shift + arrows nudges 10 pixels.</p>
     <div className="corner-fields">{alignment.corners.map((p, i) => <div key={i} className="corner-row"><span className="corner-tag" title={corners[i]}>{cornerTags[i]}</span>
       <NumberField label={`${cornerTags[i]} X`} value={Math.round(p.x * 1000) / 10} min={0} max={100} step={.1} suffix="%" onCommit={n => update(i, 'x', n)} />
       <NumberField label={`${cornerTags[i]} Y`} value={Math.round(p.y * 1000) / 10} min={0} max={100} step={.1} suffix="%" onCommit={n => update(i, 'y', n)} />

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialScene, readScene, reduceScene } from '../src/shared/domain.ts';
 import { FULL_QUAD, homography, isValidProjectionQuad, project, type Quad } from '../src/shared/geometry.ts';
-import { alignmentCorners, manualAlignment, moveAlignment, moveAlignmentCorner, surfaceQuadFromAnchors, videoAlignmentBounds } from '../src/shared/manualAlignment.ts';
+import { alignmentCorners, manualAlignment, moveAlignment, moveAlignmentCorner, moveAlignmentCorners, surfaceQuadFromAnchors, videoAlignmentBounds } from '../src/shared/manualAlignment.ts';
 
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 const equalQuad = (a: Quad, b: Quad) => a.forEach((p, i) => { close(p.x, b[i].x); close(p.y, b[i].y); });
@@ -45,6 +45,45 @@ test('each corner changes the actual video corner while keeping the other three 
     const expected = structuredClone(before); expected[index] = target;
     equalQuad(alignmentCorners(changed, bounds), expected);
   }
+});
+
+test('edge and multi-corner drags preserve selected spacing and leave other picture anchors fixed', () => {
+  const original = JSON.stringify(skew), before = alignmentCorners(skew, bounds);
+  for (const indices of [[0], [0, 1], [1, 2], [2, 3], [3, 0], [0, 2], [1, 3], [0, 1, 2], [0, 1, 2, 3], [0, 0, 1]]) {
+    const moved = moveAlignmentCorners(skew, bounds, indices, { x: .02, y: -.015 });
+    assert.ok(moved, `selection ${indices}`);
+    equalQuad(alignmentCorners(moved, bounds), before.map((p, index) => indices.includes(index) ? { x: p.x + .02, y: p.y - .015 } : p) as Quad);
+  }
+  assert.equal(JSON.stringify(skew), original);
+  equalQuad(moveAlignmentCorners(skew, bounds, [0, 1, 2, 3], { x: .02, y: -.015 })!, moveAlignment(skew, bounds, { x: .02, y: -.015 }));
+});
+
+test('selected corners stop together at the output boundary, including cropped video-sized output', () => {
+  const rect: Quad = [{ x: .2, y: .2 }, { x: .8, y: .25 }, { x: .8, y: .75 }, { x: .2, y: .8 }];
+  const fullBounds = { x: 0, y: 0, w: 1, h: 1 };
+  for (const sourceBounds of [fullBounds, bounds]) {
+    const quad = surfaceQuadFromAnchors(sourceBounds, rect);
+    for (const [indices, delta, expectedShift] of [
+      [[0, 1], { x: 0, y: -3 }, { x: 0, y: -.2 }],
+      [[1, 2], { x: 3, y: 0 }, { x: .2, y: 0 }],
+      [[2, 3], { x: 0, y: 3 }, { x: 0, y: .2 }],
+      [[3, 0], { x: -3, y: 0 }, { x: -.2, y: 0 }],
+    ] as const) {
+      const moved = moveAlignmentCorners(quad, sourceBounds, indices, delta);
+      assert.ok(moved);
+      equalQuad(alignmentCorners(moved, sourceBounds), rect.map((p, index) => (indices as readonly number[]).includes(index) ? { x: p.x + expectedShift.x, y: p.y + expectedShift.y } : p) as Quad);
+    }
+  }
+});
+
+test('group movement rejects invalid selections, folded anchors and a horizon through the surface', () => {
+  for (const indices of [[], [-1, 1], [0, 4], [0, .5], [NaN]]) assert.equal(moveAlignmentCorners(skew, bounds, indices, { x: .01, y: 0 }), null);
+  assert.equal(moveAlignmentCorners(skew, bounds, [0, 1], { x: NaN, y: 0 }), null);
+  assert.equal(moveAlignmentCorners(skew, bounds, [0, 1], { x: 0, y: Infinity }), null);
+  assert.equal(moveAlignmentCorners(skew, bounds, [0, 1], { x: 0, y: 2 }), null);
+  // An extreme perspective can keep the video convex while inverting its surrounding light.
+  const rect: Quad = [{ x: .2, y: .2 }, { x: .8, y: .2 }, { x: .8, y: .8 }, { x: .2, y: .8 }];
+  assert.equal(moveAlignmentCorners(surfaceQuadFromAnchors(bounds, rect), bounds, [0, 2], { x: -.18, y: -.18 }), null);
 });
 
 test('dragging the video translates it and its glow rigidly, stopping at video edges instead of glow edges', () => {

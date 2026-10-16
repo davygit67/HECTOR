@@ -82,7 +82,7 @@ Only one AI turn runs per browser room origin at a time. Use one studio tab for 
 
 Connect HDMI as an extended desktop. In Electron, choose the projector under **Output display**, click **Full screen**, and use Escape in the output window to exit.
 
-Choose **Manual alignment**, select its target surface, and drag the four corners while watching the projection. Enable **Test grid** as needed. Focused corners respond to arrow keys, with Shift for larger steps. Changing the target resets this adapter's alignment; resetting corners keeps content.
+Choose **Manual alignment**, select its target surface, and use **Align full screen** to calibrate at the final output size. Drag the picture to move the whole projection, a corner to reshape it, or an outline edge to move both endpoints together. **Shift-click** corners to add/remove them from a highlighted selection, then drag any selected corner to move the group with its spacing fixed. Clicking an unselected corner selects it alone. Arrow keys nudge the selected group by one output pixel; Shift + arrows moves 10 pixels. Alt-drag provides fine adjustment. Switch to **Project** for the identical alignment without controls. Enable **Test grid** as needed. Changing the target resets this adapter's alignment; resetting corners keeps content.
 
 The manual adapter uses a 1920 × 1080 logical canvas with letterboxing. It maps intrinsic surface UVs into output pixels; it does not measure metric room geometry or calibrate multiple physical surfaces. Let internal projector adjustments settle before aligning. Re-aim and realign when changing physical surfaces.
 

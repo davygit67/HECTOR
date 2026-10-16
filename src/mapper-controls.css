@@ -5,6 +5,12 @@
 .viewport .corner-handle:hover,.viewport .corner-handle:active{background:transparent}
 .viewport .corner-handle>span{top:26px;font-size:10px;opacity:0;text-shadow:0 1px 3px #000}
 .viewport .corner-handle:hover>span,.viewport .corner-handle:focus>span{opacity:1}
+.viewport .corner-handle.selected::before{background:#fff7a3;box-shadow:0 0 0 2px #203d32,0 0 0 4px #fff7a3}
+.viewport .corner-handle.selected::after{opacity:1}
+.alignment-edge-hit{stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:grab;touch-action:none;outline:none}
+.alignment-edge-hit:active{cursor:grabbing}
+.alignment-edge-highlight{stroke:#fff7a3;stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;opacity:0}
+.alignment-edge:hover .alignment-edge-highlight,.alignment-edge.selected .alignment-edge-highlight,.alignment-edge-hit:focus-visible+.alignment-edge-highlight{opacity:1}
 .painted-layer,.layer-artwork{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .painted-layer{isolation:isolate}
 .layer-panel{margin:12px 0 22px;border:1px solid #dce3d6;border-radius:9px;background:#fafbf6;padding:12px 14px}
