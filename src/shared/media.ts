@@ -6,13 +6,15 @@ export interface MediaState {
   contentId: string; generation: number; ready: boolean; playing: boolean; hasPlayed: boolean; muted: boolean;
   status: string; currentTime: number; duration: number;
   source?: 'youtube-watch'; sourceBrowserOpen?: boolean;
+  currentVideoId?: string; currentTitle?: string; autoplayNext?: boolean;
+  canGoNext?: boolean; adPlaying?: boolean; canSkipAd?: boolean; controlNotice?: string;
 }
 export interface MediaFrame {
   contentId: string; generation: number; sequence: number; width: number; height: number;
   jpeg: Uint8Array; sample: BacklightSample;
 }
 export type MediaEvent = { type: 'state'; state: MediaState } | { type: 'frame'; frame: MediaFrame } | { type: 'removed'; contentId: string };
-export type MediaCommand = { contentId: string; action: 'play' | 'pause' | 'mute' | 'unmute' | 'retry' | 'restart-renderer' | 'open-source' | 'close-source' } | { contentId: string; action: 'seek'; seconds: number };
+export type MediaCommand = { contentId: string; action: 'play' | 'pause' | 'mute' | 'unmute' | 'retry' | 'restart-renderer' | 'open-source' | 'close-source' | 'next' | 'skip-ad' } | { contentId: string; action: 'seek'; seconds: number } | { contentId: string; action: 'autoplay-next'; enabled: boolean };
 export interface MediaInput { contentId: string; type: 'mouseMove' | 'mouseDown' | 'mouseUp'; x: number; y: number }
 export interface MediaBridge {
   subscribe(listener: (event: MediaEvent) => void): () => void;
@@ -23,9 +25,10 @@ export interface MediaBridge {
 export function validateMediaCommand(value: unknown): asserts value is MediaCommand {
   if (!value || typeof value !== 'object') throw new Error('Invalid player command.');
   const c = value as Record<string, unknown>;
-  if (typeof c.contentId !== 'string' || c.contentId.length > 100 || !['play', 'pause', 'mute', 'unmute', 'retry', 'restart-renderer', 'seek', 'open-source', 'close-source'].includes(String(c.action))) throw new Error('Invalid player command.');
-  if (Object.keys(c).some(k => !['contentId', 'action', ...(c.action === 'seek' ? ['seconds'] : [])].includes(k))) throw new Error('Unexpected player command field.');
+  if (typeof c.contentId !== 'string' || c.contentId.length > 100 || !['play', 'pause', 'mute', 'unmute', 'retry', 'restart-renderer', 'seek', 'open-source', 'close-source', 'next', 'skip-ad', 'autoplay-next'].includes(String(c.action))) throw new Error('Invalid player command.');
+  if (Object.keys(c).some(k => !['contentId', 'action', ...(c.action === 'seek' ? ['seconds'] : c.action === 'autoplay-next' ? ['enabled'] : [])].includes(k))) throw new Error('Unexpected player command field.');
   if (c.action === 'seek' && (typeof c.seconds !== 'number' || !Number.isFinite(c.seconds) || c.seconds < 0 || c.seconds > 86400)) throw new Error('Invalid playback time.');
+  if (c.action === 'autoplay-next' && typeof c.enabled !== 'boolean') throw new Error('Choose whether to autoplay the next video.');
 }
 
 export function validateMediaInput(value: unknown): asserts value is MediaInput {

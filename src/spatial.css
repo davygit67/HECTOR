@@ -51,3 +51,5 @@
 .viewport[hidden],.youtube-position[hidden]{display:none}
 .player-controls-only{padding-top:0!important;padding-bottom:0!important}
 .player-controls-only:has(.youtube-feedback-list:empty){display:none}
+
+.youtube-playback-actions{flex-wrap:wrap;row-gap:8px}.youtube-playback-actions>span{flex-basis:100%;white-space:normal}.youtube-autoplay{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;margin:6px 0}.youtube-autoplay input{width:18px;height:18px;accent-color:#a5cd91}.youtube-autoplay span{color:#aebdca;font-size:12px}.youtube-playback-actions button:disabled{opacity:.45;cursor:default}

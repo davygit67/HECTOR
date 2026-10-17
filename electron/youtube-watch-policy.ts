@@ -11,6 +11,12 @@ export function allowedWatchNavigation(value: string) {
       ['www.youtube.com', 'youtube.com', 'accounts.google.com', 'consent.youtube.com', 'consent.google.com'].includes(url.hostname);
   } catch { return false; }
 }
+export function watchVideoId(value: string): string | undefined {
+  try {
+    const url = new URL(value), id = url.searchParams.get('v');
+    if (allowedWatchNavigation(value) && ['www.youtube.com', 'youtube.com'].includes(url.hostname) && url.pathname === '/watch' && id && /^[\w-]{11}$/.test(id)) return id;
+  } catch { /* Not a watch page. */ }
+}
 export interface PlayerRegion { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number }
 export function readPlayerRegion(value: unknown): PlayerRegion | undefined {
   if (!value || typeof value !== 'object') return;

@@ -8,12 +8,17 @@ const assert = require('node:assert/strict');
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'projection-watch-check-')));
 app.on('window-all-closed', () => {});
 let sources;
-const timeout = setTimeout(() => { console.error('Watch source check timed out'); app.exit(1); }, 45000);
+const timeout = setTimeout(() => { console.error('Watch source check timed out'); app.exit(1); }, 75000);
 const fixture = `<!doctype html><style>body{margin:0;background:#ff00ff}h1{position:fixed;top:0;left:0;margin:0;width:100vw;height:100px;background:#ff00ff;z-index:9999}#movie_player{position:absolute;left:40px;top:100px;width:960px;height:540px;background:black}video{width:100%;height:100%}button{position:absolute;left:40%;top:45%}</style>
-<h1>Private page furniture must never be projected</h1><div id="movie_player" class="html5-video-player"><video muted playsinline></video><button>Play / pause</button></div>
+<h1>Private page furniture must never be projected</h1><div id="movie_player" class="html5-video-player"><video muted playsinline></video><button id="play">Play / pause</button><button class="ytp-next-button">Next</button><button class="ytp-skip-ad-button" style="display:none">Skip ad</button><button class="ytp-autonav-toggle-button" aria-checked="true">Autoplay</button></div>
 <script>const c=document.createElement('canvas');c.width=1920;c.height=1080;const ctx=c.getContext('2d'),v=document.querySelector('video');let t=0;
 function draw(){ctx.fillStyle='#000';ctx.fillRect(0,0,1920,1080);ctx.fillStyle='#0066ff';ctx.fillRect(0,120,960,840);ctx.fillStyle='#ff5500';ctx.fillRect(960,120,960,840);ctx.fillStyle='#00dd55';ctx.fillRect(200+(++t%300),500,80,100);requestAnimationFrame(draw)}draw();v.srcObject=c.captureStream(30);v.play().catch(()=>{});
-document.querySelector('button').onclick=()=>v.paused?v.play():v.pause();
+document.querySelector('#play').onclick=()=>v.paused?v.play():v.pause();
+let n=Number(new URLSearchParams(location.search).get('v')?.slice(-1))||0;window.nextCount=0;window.skipCount=0;
+document.title='Fixture '+new URLSearchParams(location.search).get('v')+' - YouTube';
+document.querySelector('.ytp-next-button').onclick=()=>{window.nextCount++;const url='/watch?v=fixture000'+(++n);if(window.fullNavigation){location.href=url;return}history.pushState({},'',url);document.title='Fixture '+new URLSearchParams(location.search).get('v')+' - YouTube';v.play().catch(()=>{});};
+document.querySelector('.ytp-skip-ad-button').onclick=()=>{window.skipCount++;document.querySelector('#movie_player').classList.remove('ad-showing');document.querySelector('.ytp-skip-ad-button').style.display='none';};
+document.querySelector('.ytp-autonav-toggle-button').onclick=e=>e.currentTarget.setAttribute('aria-checked',e.currentTarget.getAttribute('aria-checked')==='true'?'false':'true');
 </script>`;
 function waitFor(predicate, message='Expected source event missing') {
   return new Promise((resolve,reject)=>{const began=Date.now();const timer=setInterval(()=>{try{const result=predicate();if(result){clearInterval(timer);resolve(result)}else if(Date.now()-began>12000){clearInterval(timer);reject(new Error(message))}}catch(e){clearInterval(timer);reject(e)}},40)});
@@ -26,7 +31,7 @@ app.whenReady().then(async()=>{
   sources=new MediaSources('http://unused.invalid',resolve('electron/source-preload.cjs'),e=>events.push(e),{canProcessFrame:()=>canProcess});
   ipcMain.on('media:source-state',(e,v)=>sources.report(e.sender,e.senderFrame===e.sender.mainFrame,v));
   const scene=reduceScene(initialScene(),{type:'content.create',id:'watch-fixture',surfaceId:'wall',title:'Watch fixture',spec:{kind:'youtube',config:{videoId:'M7lc1UVf-VE',startSeconds:0,backlight:true}}});
-  const command=action=>sources.command({contentId:'watch-fixture',action});
+  const command=(action, extra={})=>sources.command({contentId:'watch-fixture',action,...extra});
   const state=()=>sources.snapshot().find(e=>e.type==='state')?.state;
   sources.sync(scene);
   await waitFor(()=>state()?.ready && events.some(e=>e.type==='frame'), 'Watch fixture did not become ready');
@@ -42,13 +47,53 @@ app.whenReady().then(async()=>{
   assert.ok(frame.sample.colors.some(c=>c.x>.6 && c.color[0]>c.color[2]+100));
   assert.equal(frame.width,1920);assert.equal(frame.height,1080);
   command('pause');await waitFor(()=>!state().playing);assert.equal(win.webContents.isAudioMuted(),true);
+  assert.equal(state().autoplayNext,false);
+  await waitFor(()=>state().canGoNext);
+  assert.equal(await win.webContents.executeJavaScript('document.querySelector(".ytp-autonav-toggle-button").getAttribute("aria-checked")'),'false');
+  assert.throws(()=>command('skip-ad'),/skippable/);
+  await win.webContents.executeJavaScript(`document.querySelector('#movie_player').classList.add('ad-showing')`);
+  await waitFor(()=>state().adPlaying);
+  assert.throws(()=>command('seek',{seconds:100}),/ad finishes/);
+  assert.throws(()=>command('skip-ad'),/skippable/);
+  await win.webContents.executeJavaScript(`document.querySelector('.ytp-skip-ad-button').style.display='block'`);
+  await waitFor(()=>state().canSkipAd);
+  command('skip-ad');await waitFor(()=>!state().adPlaying && !state().canSkipAd);
+  assert.equal(await win.webContents.executeJavaScript('window.skipCount'),1);
+  await win.webContents.executeJavaScript(`document.querySelector('.ytp-next-button').style.display='none';document.querySelector('.ytp-next-button').setAttribute('href','/watch?v=fixture0001')`);
+  await waitFor(()=>state().canGoNext);
+  command('next');await waitFor(()=>state().currentVideoId==='fixture0001' && state().playing);
+  assert.equal(state().muted,true);assert.equal(win.webContents.isAudioMuted(),true);
+  assert.equal(state().currentTitle,'Fixture fixture0001');
+  await win.webContents.executeJavaScript(`document.querySelector('.ytp-next-button').style.display='block'`);
+  sources.sync(scene);assert.equal(state().currentVideoId,'fixture0001','Routine scene sync keeps the advanced source');
+  command('pause');command('autoplay-next',{enabled:true});
+  await new Promise(r=>setTimeout(r,400));assert.equal(state().playing,false,'Enabling autoplay never starts a paused video');
+  command('play');await waitFor(()=>state().playing);
+  await win.webContents.executeJavaScript(`document.querySelector('video').dispatchEvent(new Event('ended'))`);
+  await waitFor(()=>state().currentVideoId==='fixture0002' && state().playing);
+  assert.equal(await win.webContents.executeJavaScript('window.nextCount'),2,'Exactly one automatic advance');
+  command('autoplay-next',{enabled:false});
+  await win.webContents.executeJavaScript(`document.querySelector('video').dispatchEvent(new Event('ended'))`);
+  await new Promise(r=>setTimeout(r,2000));assert.equal(state().currentVideoId,'fixture0002','Autoplay off stops at this video');
+  command('autoplay-next',{enabled:true});
+  await win.webContents.executeJavaScript(`document.querySelector('video').dispatchEvent(new Event('ended'))`);
+  command('pause');await new Promise(r=>setTimeout(r,2000));assert.equal(state().currentVideoId,'fixture0002','Pause cancels scheduled continuation');
+  // No audio track exists in this fixture. Explicit unmute should survive both
+  // same-document Next and a full-document watch-page transition.
+  command('unmute');command('next');await waitFor(()=>state().currentVideoId==='fixture0003' && state().playing);
+  assert.equal(state().muted,false);assert.equal(win.webContents.isAudioMuted(),false);
+  command('autoplay-next',{enabled:false});
+  await win.webContents.executeJavaScript('window.fullNavigation=true');command('next');
+  await waitFor(()=>state().currentVideoId==='fixture0004' && state().playing);
+  assert.equal(state().muted,false);assert.equal(win.webContents.isAudioMuted(),false);
+  command('mute');command('pause');command('autoplay-next',{enabled:true});await waitFor(()=>!state().playing);
   const generation=state().generation;
   command('open-source');assert.equal(win.isVisible(),true);assert.equal(state().sourceBrowserOpen,true);
   await new Promise(r=>setTimeout(r,700));
   assert.equal(await win.webContents.executeJavaScript('Math.round(document.querySelector("#movie_player").getBoundingClientRect().width)'),960);
   // Native close returns to the same source, retaining playback and alignment.
   win.close();await waitFor(()=>!win.isVisible() && !state().sourceBrowserOpen);
-  assert.equal(state().generation,generation);
+  assert.equal(state().generation,generation);assert.equal(state().currentVideoId,'fixture0004','Returning to projection keeps the current video');
   await waitFor(()=>sources.snapshot().some(e=>e.type==='frame' && e.frame.sequence>frame.sequence));
   canProcess=false;await new Promise(r=>setTimeout(r,300));const seq=sources.snapshot().find(e=>e.type==='frame').frame.sequence;
   await new Promise(r=>setTimeout(r,500));assert.equal(sources.snapshot().find(e=>e.type==='frame').frame.sequence,seq);canProcess=true;
@@ -61,6 +106,7 @@ app.whenReady().then(async()=>{
   assert.equal(state().playing,false);assert.equal(state().muted,true);
   command('retry');assert.equal(win.isDestroyed(),true);assert.equal(state().playing,false);assert.equal(state().muted,true);
   await waitFor(()=>state().ready && sources.snapshot().some(e=>e.type==='frame'), 'Reloaded watch source did not produce a frame');
+  assert.equal(state().currentVideoId,'fixture0004');assert.equal(state().autoplayNext,true);assert.equal(state().playing,false);assert.equal(state().muted,true);
   sources.dispose();assert.equal(BrowserWindow.getAllWindows().length,0);
-  console.log(JSON.stringify({passed:true,normalWatchUrl:true,pausedAndMutedStartup:true,noRemoteBridge:true,matchingPictureAndColors:true,blackBarsDetected:true,sourceWindowAndReturn:true,backpressure:true,accountPageNeverProjected:true,retryCleanup:true}));
+  console.log(JSON.stringify({passed:true,normalWatchUrl:true,pausedAndMutedStartup:true,noRemoteBridge:true,matchingPictureAndColors:true,blackBarsDetected:true,sourceWindowAndReturn:true,backpressure:true,accountPageNeverProjected:true,retryCleanup:true,adSkipping:true,nextVideo:true,autoplayOptIn:true,pausedToggleSafe:true,continuationSound:true,sameAssetAcrossNavigation:true}));
 }).catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{clearTimeout(timeout);sources?.dispose();app.exit(process.exitCode||0)});

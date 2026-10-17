@@ -7,7 +7,7 @@ const { join, resolve } = require('node:path');
 const assert = require('node:assert/strict');
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'projection-youtube-ready-')));
 let sources, assets;
-const timeout = setTimeout(()=>{console.error('YouTube ready check timed out');app.exit(1)},35000);
+const timeout = setTimeout(()=>{console.error('YouTube ready check timed out');app.exit(1)},55000);
 app.whenReady().then(async()=>{
   app.dock?.hide();
   const { MediaSources } = await import('../dist-electron/electron/media-sources.js');
@@ -34,6 +34,31 @@ app.whenReady().then(async()=>{
   assert.ok(events.some(e=>e.type==='frame' && e.frame.jpeg.length>1000));
   const win=BrowserWindow.getAllWindows()[0];
   const dimensions=await win.webContents.executeJavaScript('JSON.stringify(document.querySelector("#movie_player").getBoundingClientRect().toJSON())');
+  if(process.argv.includes('--controls')) console.log(await win.webContents.executeJavaScript(`JSON.stringify([...document.querySelectorAll('#movie_player .ytp-next-button, #movie_player .ytp-autonav-toggle-button, #movie_player [class*="skip-ad"], #movie_player [class*="ad-skip"]')].map(n=>({tag:n.tagName,class:n.className,label:n.getAttribute('aria-label'),href:n.getAttribute('href'),checked:n.getAttribute('aria-checked'),disabled:n.getAttribute('aria-disabled'),width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height,display:getComputedStyle(n).display,visibility:getComputedStyle(n).visibility})))`));
+  if(process.argv.includes('--controls')) console.log(await win.webContents.executeJavaScript(`JSON.stringify([...document.querySelectorAll('#related a[href*="watch?v="], .ytp-autonav-endscreen-link-container[href]')].slice(0,5).map(n=>({tag:n.tagName,class:n.className,id:n.id,href:n.getAttribute('href')})))`));
+  if(process.argv.includes('--next-muted') || process.argv.includes('--autoplay-muted')) {
+    const autoplay=process.argv.includes('--autoplay-muted');
+    if(autoplay){
+      assert.equal(state.adPlaying,false,'This optional check needs a video with no current ad');
+      assert.ok(state.duration>3);
+      sources.command({contentId:'paused-youtube',action:'autoplay-next',enabled:true});
+      sources.command({contentId:'paused-youtube',action:'play'});
+      const playStarted=Date.now();
+      while(Date.now()-playStarted<10000){const s=sources.snapshot().find(e=>e.type==='state').state;if(s.playing && s.currentTime>.2)break;await new Promise(r=>setTimeout(r,100));}
+      sources.command({contentId:'paused-youtube',action:'seek',seconds:state.duration-.5});
+    }else sources.command({contentId:'paused-youtube',action:'next'});
+    const began=Date.now();let nextState;
+    while(Date.now()-began<20000){
+      nextState=sources.snapshot().find(e=>e.type==='state').state;
+      if(nextState.currentVideoId!==videoId && nextState.ready && nextState.playing) break;
+      await new Promise(r=>setTimeout(r,200));
+    }
+    if(nextState.currentVideoId===videoId) console.log(JSON.stringify({state:nextState,player:await win.webContents.executeJavaScript(`(()=>{const v=document.querySelector('#movie_player video');return {ended:v?.ended,paused:v?.paused,time:v?.currentTime,duration:v?.duration,autoplay:document.querySelector('.ytp-autonav-toggle-button')?.getAttribute('aria-checked')}})()`)}));
+    assert.notEqual(nextState.currentVideoId,videoId);assert.equal(nextState.playing,true);assert.equal(nextState.muted,true);assert.equal(win.webContents.isAudioMuted(),true);
+    sources.command({contentId:'paused-youtube',action:'pause'});
+    console.log(JSON.stringify({passed:true,normalWatchNext:!autoplay,normalWatchAutoplay:autoplay,sourceVideo:videoId,nextVideo:nextState.currentVideoId,muted:true}));
+    return;
+  }
   if(process.argv.includes('--play-muted')){
     sources.command({contentId:'paused-youtube',action:'play'});
     await new Promise(r=>setTimeout(r,6000));
