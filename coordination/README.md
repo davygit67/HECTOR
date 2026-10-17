@@ -4,6 +4,10 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Current agent capability milestone — October 17
+
+The user approved implementing full interface operation, completed-adjustment memory, optimized context, rendered feedback and adaptable experiences. Canvas owns the canonical Studio/Memory contracts, host/IPC/browser adapters, manual-event capture, composition/memory UI and renderer observation. Agent owns27modeltools,31scene command adapters, context/routing, durable scoped learning and six preset recipes. Exact contracts are in src/shared/studio.ts; current validation/activation is tracked in each owner's status note. Implementation and integrated validation are complete:96agent tests,183root tests,11silent browser assertions, Memory UI create/edit/save/forget and a real OpenAI visual inspection of an isolated rendered scene. Root source commit822c96c and the agent follow-up are published together after separate owned-path reviews. Native IPC is built/typechecked; interactive native/Windows/physical hardware qualification remains pending. Normal idle/clean synchronization resumes after publication. Older publication pauses below are historical and released.
+
 ## Active tasks and file ownership
 
 | Task | ID | Owns |

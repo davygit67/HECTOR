@@ -1,5 +1,18 @@
 # Projection Mapper: agent, content, and canvas architecture
 
+## Implemented agent layer — October 17, 2026
+
+The shared canvas remains authoritative. The agent now has typed tools for the implemented scene controls (layout, layers, media presentation, display, selection and explicit alignment/geometry edits), plus a host-owned Studio port for navigation, playback/output, imports, saved compositions and sensor controls. File/account/browser-permission steps report a user handoff. Retired effects and game-score injection remain unavailable. Physical geometry solving, body/touch tracking, arbitrary generated games and unimplemented services are not implied by interface parity.
+
+Context refreshes each model step with relevant scene details and tool groups; on-demand inspection/selection unlocks the complete implemented interface. The full host exposes27tools/31canonical scene command types. A bounded local learning store persists explicit preferences and tentative examples from completed manual adjustments, with room/activity/surface scope, geometry revisions, editable/forgettable records and a learning switch. Calibration remains authoritative setup state, never an inferred aesthetic preference. This is retrieval-based adaptation, not reinforcement learning or weight training. Chat history is separate and bounded; old screenshot bytes are discarded from subsequent turns.
+
+The agent can request at most two actual rendered surface previews per turn, with scene revision, timestamp, runtime readiness and limitations. Fresh images reach the model as image input; stale/missing images do not establish visual success. Previews are software renders, not physical-camera evidence. Local code still handles all continuous video/color/sensor processing.
+
+Six adaptable built-in experiences use the existing content library and revision-checked atomic scene batches: underwater, ambient art, cinema, music, cooking and tabletop game. They preserve unrelated panels and geometry. User-approved custom arrangements live in the canvas-owned composition library. No media or asset identity is fabricated; search/import/runtime readiness retain their existing provenance rules.
+
+See [agent guide](agent/README.md), [host integration](agent/INTEGRATION.md) and [current coordination status](coordination/agent-status.md) for APIs, validation and activation. The product architecture below includes future capabilities; this implementation note defines the current agent scope and supersedes older statements that alignment, layer/display/media controls or visual inspection are UI-only.
+
+
 This is a proposed design for the user's expanded first prototype. It records the intended product and implementation boundaries; it does not claim these features are implemented or hardware-tested.
 
 The built-in matrix/ripple line demo is permanently retired at the user's request. Legacy scene effect fields remain disabled for save compatibility, with no renderer/UI or agent enable path. The agent no longer exposes `set_effect` or allows `effect.set`; it must not recreate the removed demo as artwork. User-created artwork and video backlighting remain distinct supported content.

@@ -90,7 +90,7 @@ export function createContentTools(host: ContentToolHost) {
       ...(content?.kind === 'media' ? {
         assetAvailability: 'unverified' as const,
         playback: { verified: false, requestedRunning: content.state.clock.running,
-          controls: 'Local file upload and media settings use the interface. A saved asset reference does not establish that the file is available in this browser or that playback is visible.' },
+          controls: 'File selection uses the interface handoff; configure_media controls presentation settings. A saved asset reference does not establish that the file is available in this browser or that playback is visible.' },
       } : {}),
       ...(content?.kind === 'art' ? { appearance: { preset: content.config.preset, ...ART_PRESETS[content.config.preset] } } : {}),
       ...(content?.kind === 'youtube' ? {
@@ -216,7 +216,7 @@ export function createContentTools(host: ContentToolHost) {
       }),
     }),
     update_content: tool({
-      description: 'Edit existing content. null preserves title/spec; non-null spec replaces the FULL config and must retain kind. Recipe config updates return to ingredients; artwork preserves its clock; game config requires idle (reset first only if the user wants to discard progress). YouTube video/start changes reload the player; use set_youtube_backlight for a lighting toggle or configure_video_backlight for lighting settings. Title-only edits preserve state. Uploaded media supports title-only edits here: keep spec null and use the interface for file or media-setting changes.',
+      description: 'Edit existing content. null preserves title/spec; non-null spec replaces the FULL config and must retain kind. Recipe config updates return to ingredients; artwork preserves its clock; game config requires idle (reset first only if the user wants to discard progress). YouTube video/start changes reload the player; use set_youtube_backlight for a lighting toggle or configure_video_backlight for lighting settings. Title-only edits preserve state. Uploaded media supports title-only edits here: keep spec null and use configure_media for presentation settings and operate_studio asset.import for a file-selection handoff.',
       strict: true,
       inputSchema: z.strictObject({ contentId, title: title.nullable(), spec: spec.nullable() }),
       execute: (input, options) => host.once('update_content', input, options, async () => {

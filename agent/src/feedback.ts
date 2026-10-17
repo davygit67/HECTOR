@@ -10,10 +10,20 @@ export function createCanvasFeedback(initial: Scene) {
   let scene = initial;
   const changes = new Map<string, Command>();
   const failures = new Set<string>();
+  const messages: string[] = [];
   let searchResults: readonly YouTubeSearchResult[] = [];
   const name = (surfaceId: string) => scene.surfaces.find(surface => surface.id === surfaceId)?.name ?? surfaceId;
 
   function describeChange(command: Command): string {
+    if (command.type === 'content.move' || command.type === 'timer.move') {
+      const item = [...scene.contents, ...scene.timers].find(i => i.id === command.id);
+      return item ? `Adjusted ${JSON.stringify(item.title)} on ${name(item.surfaceId)}; accepted placement and size are within its surface.` : 'The panel no longer exists.';
+    }
+    if (command.type === 'layer.configure' || command.type === 'layer.reorder') return 'Updated the requested layer settings.';
+    if (command.type === 'display.configure') return `Updated output display settings${scene.display?.blackout ? '; blackout is on' : ''}.`;
+    if (command.type === 'calibration.set' || command.type === 'calibration.reset') return 'Updated manual alignment corners. Physical alignment has not been verified.';
+    if (['surface.move', 'projector.update', 'viewer.update'].includes(command.type)) return 'Updated the requested simulated room setup. This is not a physical measurement.';
+
     if ('id' in command && (command.type.startsWith('content.') || command.type.startsWith('youtube.backlight'))) {
       const content = scene.contents.find(item => item.id === command.id);
       if (!content) return 'Removed the requested content.';
@@ -64,6 +74,7 @@ export function createCanvasFeedback(initial: Scene) {
   }
 
   return {
+    recordMessage(message: string) { messages.push(message); },
     recordYouTubeSearch(results: readonly YouTubeSearchResult[]) { searchResults = results; },
     recordFailure(error: string) { failures.add(error); },
     record(command: Command, receipt: CommandReceipt) {
@@ -74,13 +85,14 @@ export function createCanvasFeedback(initial: Scene) {
       changes.set(key, command);
     },
     formatReply({ text, toolNames }: { text: string; toolNames: readonly string[] }) {
-      if (!changes.size && !failures.size) {
+      if (!changes.size && !failures.size && !messages.length) {
         if (searchResults.length) return 'Found YouTube videos; none have been placed yet:\n' + searchResults.map(result =>
           `${result.title}${result.channel ? ` — ${result.channel}` : ''}${result.metadataVerified ? '' : ' — title/channel metadata unavailable; playback unverified'}\n${result.url}`).join('\n\n');
-        return toolNames.some(toolName => !['inspect_room', 'search_youtube'].includes(toolName))
+        return toolNames.some(toolName => !['inspect_room', 'search_youtube', 'inspect_studio', 'inspect_visual', 'manage_memory', 'list_experiences', 'select_tools'].includes(toolName))
           ? 'No canvas changes were confirmed. The requested action could not be applied.' : text;
       }
       const lines = [...changes.values()].map(describe);
+      lines.push(...messages);
       for (const error of failures) lines.push(`Could not apply an action: ${error}`);
       return lines.join('\n');
     },

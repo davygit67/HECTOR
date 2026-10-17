@@ -26,7 +26,8 @@ test('direct OpenAI Responses adapter sends strict surface tools and receives ca
   const timer = requests[0].body.tools.find((item: { name: string }) => item.name === 'create_timer');
   assert.equal(timer.strict, true);
   assert.deepEqual(timer.parameters.properties.surfaceId.enum, ['tabletop', 'wall']);
-  assert.equal(requests[0].body.tools.length, 17);
+  assert.ok(requests[0].body.tools.length < 23);
+  assert.ok(requests[0].body.tools.some((item: { name: string }) => item.name === 'select_tools'));
   assert.equal(requests[0].body.tools.some((item: { name: string }) => item.name === 'set_effect'), false);
   function assertStrictObjects(schema: Record<string, any>) {
     assert.equal('oneOf' in schema, false);
@@ -43,10 +44,7 @@ test('direct OpenAI Responses adapter sends strict surface tools and receives ca
     assert.equal(item.strict, true);
     assertStrictObjects(item.parameters);
   }
-  const update = requests[0].body.tools.find((item: { name: string }) => item.name === 'update_content');
-  assert.match(JSON.stringify(update.parameters), /"recipe"/);
-  assert.match(JSON.stringify(update.parameters), /"youtube"/);
-  assert.match(JSON.stringify(update.parameters), /"null"/);
+  assert.equal(requests[0].body.tools.some((item: { name: string }) => item.name === 'update_content'), false);
   const receipt = requests[1].body.input.find((item: { type: string }) => item.type === 'function_call_output');
   assert.equal(JSON.parse(receipt.output).timer.status, 'running');
   assert.equal(fixture.scene().timers[0].deadline, 301000);

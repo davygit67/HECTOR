@@ -1,3 +1,4 @@
+import { boundedHistory } from './context.js';
 import { randomUUID } from 'node:crypto';
 import { ToolLoopAgent, isStepCount, type LanguageModel, type ModelMessage, type ToolSet } from 'ai';
 
@@ -10,6 +11,7 @@ export interface AgentEvent {
 export interface TurnBinding {
   tools: ToolSet;
   instructions: () => Promise<string>;
+  activeTools?: () => string[];
   formatReply?: (reply: { text: string; toolNames: readonly string[] }) => string;
 }
 
@@ -97,13 +99,13 @@ export function createAgentSession(options: SessionOptions) {
           providerOptions: { openai: { store: false, parallelToolCalls: false } },
           prepareStep: async () => {
             signal.throwIfAborted();
-            return { instructions: await abortable(binding.instructions(), signal) };
+            return { instructions: await abortable(binding.instructions(), signal), activeTools: binding.activeTools?.() };
           },
           onToolExecutionStart: ({ toolCall }) => emit({ type: 'tool-start', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
           onToolExecutionEnd: ({ toolCall }) => emit({ type: 'tool-end', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
           onStepEnd: step => { completed.push(...step.response.messages); },
         });
-        const result = await abortable(agent.generate({ messages: [...turns.flat(), user], abortSignal: signal }), signal);
+        const result = await abortable(agent.generate({ messages: [...boundedHistory(turns), user], abortSignal: signal }), signal);
         const status = result.finishReason === 'stop' ? 'complete' : 'incomplete';
         const modelText = result.text || 'The request ended before a final reply. Check the action results before continuing.';
         const text = binding.formatReply?.({ text: modelText, toolNames: result.steps.flatMap(step => step.toolCalls.map(call => call.toolName)) }) ?? modelText;
@@ -124,7 +126,7 @@ export function createAgentSession(options: SessionOptions) {
           status,
           steps: result.steps.length,
           finishReason: result.finishReason,
-          usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, totalTokens: result.usage.totalTokens },
+          usage: { inputTokens: result.totalUsage.inputTokens, outputTokens: result.totalUsage.outputTokens, totalTokens: result.totalUsage.totalTokens },
           tools: result.steps.flatMap(step => step.toolResults.map(item => ({ toolName: item.toolName, toolCallId: item.toolCallId, output: item.output }))),
         };
       } catch {
