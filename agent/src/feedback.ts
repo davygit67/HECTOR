@@ -9,6 +9,7 @@ import { presentationContext } from './presentation.js';
 export function createCanvasFeedback(initial: Scene) {
   let scene = initial;
   const changes = new Map<string, Command>();
+  const editedVideoSources = new Set<string>();
   const failures = new Set<string>();
   const messages: string[] = [];
   let searchResults: readonly YouTubeSearchResult[] = [];
@@ -32,11 +33,13 @@ export function createCanvasFeedback(initial: Scene) {
         const source = content.config.backlight ? ' A connected native video source needs no screen sharing. Only the browser iframe fallback uses “Enable live colors” to share this studio tab. Check the player’s source status.' : '';
         if (command.type === 'youtube.backlight.configure') {
           const settings = { ...BACKLIGHT_DEFAULTS, ...content.config.backlightSettings };
-          return `Dynamic backlight configured on ${surface}: ${content.config.backlight ? 'enabled' : 'disabled'}, brightness ${Math.round(settings.intensity * 100)}%, spread ${Math.round(settings.spread * 100)}%, smoothing ${settings.smoothingMs} ms, ${BACKLIGHT_TONE_LABELS[settings.toneProfile ?? 'cinema']} tone profile, opacity ${Math.round((settings.opacity ?? 1) * 100)}%, vibrance ${Math.round((settings.vibrance ?? 1) * 100)}%, room fill ${Math.round((settings.roomFill ?? 0) * 100)}%${(settings.roomFill ?? 0) === 0 ? ' (normal backlight)' : ' with timers and foreground panels protected'}.${source}`;
+          const video = editedVideoSources.has(content.id) ? `YouTube on ${surface}: ${JSON.stringify(content.title)} — ${videoUrl(content.config.videoId)}. Playback is not verified.\n` : '';
+          return `${video}Dynamic backlight configured on ${surface}: ${content.config.backlight ? 'enabled' : 'disabled'}, brightness ${Math.round(settings.intensity * 100)}%, spread ${Math.round(settings.spread * 100)}%, smoothing ${settings.smoothingMs} ms, ${BACKLIGHT_TONE_LABELS[settings.toneProfile ?? 'cinema']} tone profile, opacity ${Math.round((settings.opacity ?? 1) * 100)}%, vibrance ${Math.round((settings.vibrance ?? 1) * 100)}%, room fill ${Math.round((settings.roomFill ?? 0) * 100)}%${(settings.roomFill ?? 0) === 0 ? ' (normal backlight)' : ' with timers and foreground panels protected'}.`;
         }
         if (command.type === 'youtube.backlight') return `YouTube backlight on ${surface}: ${content.config.backlight ? 'enabled' : 'disabled'}.${source}`;
         const action = command.type === 'content.update' ? 'updated' : command.type === 'content.attach' ? 'moved' : 'placed';
-        return `YouTube player ${action} on ${surface}; dynamic backlight ${content.config.backlight ? 'enabled' : 'disabled'}. Video: ${JSON.stringify(content.title)} — ${videoUrl(content.config.videoId)}. New video sources default to paused and muted; use the player controls when ready.${source}`;
+        const fill = Math.round((content.config.backlightSettings?.roomFill ?? BACKLIGHT_DEFAULTS.roomFill ?? 0) * 100);
+        return `YouTube player ${action} on ${surface}; dynamic backlight ${content.config.backlight ? `enabled, room fill ${fill}%` : 'disabled'}. Video: ${JSON.stringify(content.title)} — ${videoUrl(content.config.videoId)}. New video sources default to paused and muted; playback is not verified.`;
       }
       if (content.kind === 'art') {
         // title is only a label. It cannot turn contours into fish or generated video.
@@ -80,6 +83,7 @@ export function createCanvasFeedback(initial: Scene) {
     record(command: Command, receipt: CommandReceipt) {
       if (!receipt.ok) { failures.add(receipt.error); return; }
       scene = receipt.scene;
+      if ((command.type === 'content.create' || command.type === 'content.update') && scene.contents.some(c => c.id === command.id && c.kind === 'youtube')) editedVideoSources.add(command.id);
       // Compound create/start and successive edits report the final accepted state.
       const key = 'id' in command ? `${command.type.startsWith('youtube.backlight') ? 'content' : command.type.split('.')[0]}:${command.id}` : command.type;
       changes.set(key, command);

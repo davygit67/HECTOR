@@ -40,7 +40,7 @@ test('agent creates a running timer and can attach it on a follow-up without res
 test('surface creation uses existing handles and advanced edits have separate tools', async () => {
   const fixture = canvasFixture();
   const bound = await bindCanvasTurn(fixture.port, { turnId: 'turn', signal: new AbortController().signal });
-  assert.deepEqual(Object.keys(bound.tools), ['select_tools', 'inspect_room', 'search_youtube', 'create_timer', 'control_timer', 'attach_timer', 'set_grid', 'edit_scene', 'arrange_panel', 'configure_media', 'list_experiences',
+  assert.deepEqual(Object.keys(bound.tools), ['select_tools', 'review_request', 'inspect_room', 'search_youtube', 'create_timer', 'control_timer', 'attach_timer', 'set_grid', 'edit_scene', 'arrange_panel', 'configure_media', 'list_experiences',
     'create_note', 'create_recipe', 'create_artwork', 'create_reaction_game', 'display_youtube', 'set_youtube_backlight', 'configure_video_backlight', 'update_content', 'control_content', 'attach_content', 'remove_content']);
   const schema = await asSchema(bound.tools.create_timer.inputSchema).jsonSchema;
   const properties = schema.properties!;

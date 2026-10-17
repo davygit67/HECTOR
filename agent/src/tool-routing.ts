@@ -36,7 +36,7 @@ export function createToolSelector(prompt: string) {
     },
     activeTools(available: string[], used: string[]) {
       if (all) return available;
-      const selected = new Set(['inspect_room', 'inspect_studio', 'select_tools', ...used, ...[...enabled].flatMap(g => [...groups[g]])]);
+      const selected = new Set(['inspect_room', 'inspect_studio', 'select_tools', 'review_request', ...used, ...[...enabled].flatMap(g => [...groups[g]])]);
       return available.filter(name => selected.has(name));
     },
   };

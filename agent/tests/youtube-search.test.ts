@@ -160,7 +160,7 @@ test('topic search selects a grounded video then displays it default-on while pr
     toolReply('display_youtube', { surfaceId: 'wall', video: url, title: grounded.results[0].title, backlight: null, newPlayer: null }, 'd'), textReply('Playing perfectly!')] });
   const agent = createProjectionAgent({ canvas: fixture.port, model, youtubeSearch: async () => { searches++; return grounded; } });
   const result = await agent.send('put a rain sounds youtube video on the wall with backlight effect');
-  assert.equal(searches, 1); assert.deepEqual(result.tools.map(t => t.toolName), ['search_youtube', 'display_youtube']);
+  assert.equal(searches, 1); assert.deepEqual(result.tools.map(t => t.toolName), ['search_youtube', 'display_youtube', 'review_request']);
   const video = fixture.scene().contents.find(c => c.kind === 'youtube')!;
   assert.deepEqual(video.config, { videoId: id, startSeconds: 0, backlight: true });
   assert.equal(video.title, grounded.results[0].title); assert.equal(video.surfaceId, 'wall');

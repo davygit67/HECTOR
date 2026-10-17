@@ -32,10 +32,12 @@ export function focusedInstructions(all: string, prompt: string, snapshot: Snaps
   const text = `${prompt} ${snapshot.scene.contents.map(c => c.kind).join(' ')}`;
   const youtube = /youtube|music|video|backlight|glow|cinema|movie|source|light|search/i.test(text);
   const art = /\bart\b|fish|stars|aurora|contour|background|underwater|experience|transform/i.test(text);
-  const media = /media|video|file|image|upload/i.test(text);
+  const media = /media|video|file|image|upload|poster|photo|picture|animation|sprite|logo/i.test(text);
   return all.split('\n').filter(line => {
     if (/^(Use display_youtube|For topic requests|Before placing a requested video|If the user asks only to search|YouTube backlight|Use set_youtube_backlight|The same configure_video_backlight|Describe this honestly|Enabled\/configured backlight|For an existing YouTube|YouTube scene acceptance|The “Use player)/.test(line)) return youtube;
-    if (/^(Check the requested visual|A content title|If no supported preset|Artwork uses|Artwork config)/.test(line)) return art;
+    // Subject honesty is global: an unfamiliar requested subject may not match
+    // any preset keyword. Never filter its limitations out of the context.
+    if (/^(Artwork uses|Artwork config)/.test(line)) return art;
     if (/^Media entries/.test(line)) return media;
     return true;
   }).join('\n');

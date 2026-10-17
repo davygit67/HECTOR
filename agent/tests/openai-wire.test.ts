@@ -12,6 +12,7 @@ test('direct OpenAI Responses adapter sends strict surface tools and receives ca
     const output = requests.length === 1
       ? [{ type: 'function_call', id: 'fc-1', call_id: 'call-1', name: 'create_timer',
           arguments: JSON.stringify({ surfaceId: 'tabletop', title: 'Pasta', durationSeconds: 300, start: true }) }]
+      : requests.length === 3 ? [{ type: 'function_call', id: 'fc-review', call_id: 'review', name: 'review_request', arguments: JSON.stringify({ requirements: [{ id: 'timer', request: 'Start pasta timer', status: 'completed', evidence: ['call-1'], reason: null }] }) }]
       : [{ type: 'message', id: 'msg-2', role: 'assistant', content: [{ type: 'output_text', text: 'Started.', annotations: [] }] }];
     return new Response(JSON.stringify({ id: `resp-${requests.length}`, model: 'gpt-5.4-mini', output,
       usage: { input_tokens: 30, output_tokens: 10, total_tokens: 40 } }), { headers: { 'content-type': 'application/json' } });
@@ -19,7 +20,8 @@ test('direct OpenAI Responses adapter sends strict surface tools and receives ca
   const fixture = canvasFixture();
   const result = await createProjectionAgent({ canvas: fixture.port, model: provider.responses('gpt-5.4-mini') }).send('Start pasta timer.');
   assert.equal(result.text, 'Timer "Pasta" on Tabletop: running; set for 300 seconds.');
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
+  assert.equal(requests[2].body.tool_choice.name, 'review_request');
   assert.equal(requests[0].url, 'https://api.openai.com/v1/responses');
   assert.equal(requests[0].body.store, false);
   assert.equal(requests[0].body.parallel_tool_calls, false);

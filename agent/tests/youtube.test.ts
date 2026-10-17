@@ -51,7 +51,7 @@ test('display_youtube uses the shared parser, valid bounds and default-on backli
   assert.equal(receipt.playback.output, CONTENT_REGISTRY.find(entry => entry.kind === 'youtube')!.description);
   assert.match(result.text, /player placed on Back wall; dynamic backlight enabled/);
   assert.match(result.text, /default to paused and muted/);
-  assert.match(result.text, /native video source needs no screen sharing/);
+  assert.match(result.text, /playback is not verified/);
   assert.doesNotMatch(result.text, /is playing|matches every frame/);
 });
 

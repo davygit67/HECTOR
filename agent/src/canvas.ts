@@ -18,6 +18,7 @@ import { createExperienceTools } from './experiences.js';
 import type { MemoryStore } from './memory.js';
 import { createToolSelector } from './tool-routing.js';
 import { focusedRoomContext, focusedInstructions, memoryContext } from './context.js';
+import { createRequestReview } from './request-review.js';
 
 export type CanvasPort = Pick<Bridge, 'getSnapshot' | 'dispatch'> & { studio?: StudioPort };
 
@@ -75,6 +76,7 @@ ROOM_DATA.layers lists each surface back-to-front with resolved visibility/opaci
 Use registry defaults for unspecified style parameters on new instances; preserve existing values when editing. Do not invent unsupported presets or game mechanics.
 Check the requested visual subject against the actual preset descriptions before changing artwork.
 A content title is only a label: renaming an animation does not change what it draws. Never substitute an unrelated preset and label it as the requested subject.
+Never replace a requested poster/photo/custom animation with a text note, emoji, unrelated preset or placeholder unless the user explicitly chooses that approximation. Missing imagery is an unfinished asset request. Explain how to import a prepared image/video and then offer to arrange it; do not create a placeholder to count the request as handled.
 If no supported preset can depict the requested subject, explain that limitation and offer supported choices without changing the canvas. Ask before substituting an approximation.
 This agent selects and configures implemented content; it does not generate arbitrary animation code or video.
 Use display_youtube directly for a YouTube link or video ID supplied by the user. Never invent a video ID or pass a search phrase to display_youtube.
@@ -111,6 +113,7 @@ export async function bindCanvasTurn(canvas: CanvasPort, context: { turnId: stri
   const initial = await canvas.getSnapshot();
   roomContext(initial);
   const feedback = createCanvasFeedback(initial.scene);
+  const review = createRequestReview(context.prompt ?? 'Apply the requested change.');
   const videoSources = services.videoSources ?? new Set<string>();
   if (context.prompt !== undefined) rememberUserVideos(context.prompt, videoSources);
   for (const content of initial.scene.contents) if (content.kind === 'youtube') { videoSources.delete(content.config.videoId); videoSources.add(content.config.videoId); }
@@ -156,6 +159,7 @@ export async function bindCanvasTurn(canvas: CanvasPort, context: { turnId: stri
   const accepted = (scene: Scene) => ({ ok: true as const, revision: scene.revision });
   const tools = {
     ...selector.tools,
+    ...review.tools,
     inspect_room: tool({
       description: 'Read the current room, existing surfaces/timers, supported capabilities, output and persistence state.',
       strict: true,
@@ -243,7 +247,11 @@ export async function bindCanvasTurn(canvas: CanvasPort, context: { turnId: stri
       allowVideo: context.prompt === undefined ? undefined : id => videoSources.has(id) }),
   };
 
-  return { tools, activeTools: () => selector.activeTools(Object.keys(tools), [...usedTools]), formatReply: feedback.formatReply, instructions: async () => {
+  return { tools, review: review.state, activeTools: () => selector.activeTools(Object.keys(tools), [...usedTools]),
+    formatReply: (reply: { text: string; toolNames: readonly string[] }) => {
+      const confirmed = feedback.formatReply(reply);
+      return [confirmed, review.formatUnfinished()].filter(Boolean).join('\n\n');
+    }, instructions: async () => {
     const snapshot = await canvas.getSnapshot();
     for (const item of snapshot.scene.contents) if (item.kind === 'youtube') { videoSources.delete(item.config.videoId); videoSources.add(item.config.videoId); }
     while (videoSources.size > 200) videoSources.delete(videoSources.values().next().value!);
@@ -260,6 +268,8 @@ Tools are selected for this request; select_tools can enable any category or all
 ROOM_DATA (JSON):
 ${JSON.stringify(data)}
 
-${learning}`;
+${learning}
+
+${review.instructions()}`;
   } };
 }

@@ -19,20 +19,21 @@ Enter the key locally in `agent/.env`; never paste it into chat or expose it thr
 | --- | --- | --- |
 | `OPENAI_API_KEY` | Required | Trusted host credential |
 | `OPENAI_MODEL` | `gpt-5.4-mini` | Direct Responses API model |
-| `AGENT_MAX_STEPS` | `6` | Model steps per request |
+| `AGENT_MAX_STEPS` | `12` | Total model steps, including completion review and continuation |
 | `AGENT_MAX_OUTPUT_TOKENS` | `1500` | Output limit per step |
-| `AGENT_TIMEOUT_MS` | `45000` | Whole request deadline |
+| `AGENT_TIMEOUT_MS` | `90000` | Whole request deadline, shared by all continuations |
 | `AGENT_HISTORY_TURNS` | `10` | Maximum complete turns retained |
 
 The model is configurable. These limits bound individual requests, not total account spending. Requests use `store:false`, which does not promise zero provider retention. Conversation history is process-local; learning memory persists separately when the host supplies `memoryPath`.
 
 ## What the agent can do
 
-The full Studio integration exposes 27 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations.
+The full Studio integration exposes 28 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults.
 
 | Tools | Purpose |
 | --- | --- |
 | `select_tools` | Enable additional tool categories on demand |
+| `review_request` | Track every requested outcome; continue pending work and explain blocked items or user handoffs |
 | `inspect_room`, `inspect_studio` | Authoritative scene, interface, runtime readiness/errors and hardware state |
 | `create_timer`, `control_timer`, `attach_timer` | Timer creation, lifecycle and surface attachment |
 | `create_note`, `create_recipe`, `create_artwork`, `create_reaction_game` | Implemented content; presets are not arbitrary generated animation/game code |
@@ -58,6 +59,10 @@ Examples:
 - “Save this composition as Movie night.”
 
 File selection, browser fullscreen permissions and account sign-in may require a user action. Handoffs are reported as pending, never as completed uploads or authentication. Sensor operations expose the implemented acquisition/replay controls; they do not create body tracking, touch calibration or a physical geometry solution. Game scores are not injected by the agent. The retired matrix/ripple demo cannot return.
+
+After attempted actions, a model text stop alone cannot complete the request. A structured review must account for the original prompt, with stable requirement IDs and actual successful action receipts for completed outcomes. Searches, failed actions and import handoffs cannot establish completion. Pending supported work continues within the same total step/time budget without replaying accepted changes. Blocked/awaiting-user items appear alongside the deterministic accepted-state summary, and the overall status is incomplete. The final available step is reserved for review when possible. No review means no complete status. Questions and read-only inspection keep their normal answer flow.
+
+The model still interprets intent and matches requirements to receipts; this is not a mathematical guarantee of semantic or visual correctness. Current tools cannot generate custom figurative animation or poster imagery. They must explain missing assets and offer preparation/import, not silently substitute a note, emoji or unrelated preset. Global subject-honesty instructions remain in context even when a subject matches no preset keywords. Accepted scene state does not prove visible playback or physical projection.
 
 ## Learning and context
 
@@ -91,6 +96,7 @@ See [INTEGRATION.md](INTEGRATION.md) for host APIs and [agent status](../coordin
 
 ```sh
 node --env-file-if-exists=.env --import tsx tests/live-capabilities.ts
+node --env-file-if-exists=.env --import tsx tests/live-multipart.ts
 ```
 
-It exercises real model layout/layer/display requests and preference memory without connecting to the user's scene. Neither offline nor synthetic live checks establish physical Kinect/projector performance.
+These exercise real model layout/layer/display requests, preference memory, the screenshot's mixed supported/unsupported composition, and a fully supported four-operation composition without connecting to the user's scene. Multipart search uses a fixed grounded fixture; it does not test real search, playback or generated assets. Neither offline nor synthetic live checks establish physical Kinect/projector performance.

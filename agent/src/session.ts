@@ -1,6 +1,7 @@
 import { boundedHistory } from './context.js';
+import type { RequestReview } from './request-review.js';
 import { randomUUID } from 'node:crypto';
-import { ToolLoopAgent, isStepCount, type LanguageModel, type ModelMessage, type ToolSet } from 'ai';
+import { ToolLoopAgent, isStepCount, type LanguageModel, type ModelMessage, type ToolSet, type StepResult } from 'ai';
 
 export interface AgentEvent {
   type: 'tool-start' | 'tool-end';
@@ -12,6 +13,7 @@ export interface TurnBinding {
   tools: ToolSet;
   instructions: () => Promise<string>;
   activeTools?: () => string[];
+  review?: RequestReview;
   formatReply?: (reply: { text: string; toolNames: readonly string[] }) => string;
 }
 
@@ -51,12 +53,21 @@ function abortable<T>(work: PromiseLike<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+function toolHistory(messages: ModelMessage[]): ModelMessage[] {
+  return messages.flatMap((message): ModelMessage[] => {
+    if (message.role !== 'assistant') return [message];
+    if (typeof message.content === 'string') return [];
+    const content = message.content.filter(part => part.type !== 'text');
+    return content.length ? [{ ...message, content }] : [];
+  });
+}
+
 /** One conversation, one active turn. Room state always stays with the host. */
 export function createAgentSession(options: SessionOptions) {
   const turns: ModelMessage[][] = [];
-  const maxSteps = options.maxSteps ?? 6;
+  const maxSteps = options.maxSteps ?? 12;
   const maxOutputTokens = options.maxOutputTokens ?? 1500;
-  const timeoutMs = options.timeoutMs ?? 45000;
+  const timeoutMs = options.timeoutMs ?? 90000;
   const historyTurns = options.historyTurns ?? 10;
   for (const [name, value, max] of [
     ['maxSteps', maxSteps, 20], ['maxOutputTokens', maxOutputTokens, 16000],
@@ -90,49 +101,62 @@ export function createAgentSession(options: SessionOptions) {
         signal.throwIfAborted();
         const binding = await abortable(options.bindTurn({ turnId: randomUUID(), signal, prompt: prompt.trim() }), signal);
         signal.throwIfAborted();
-        const agent = new ToolLoopAgent({
+        let forceReview = false;
+        const steps: StepResult<ToolSet>[] = [];
+        const run = () => new ToolLoopAgent({
           model: options.model,
           tools: binding.tools,
           maxOutputTokens,
           maxRetries: 1,
-          stopWhen: isStepCount(maxSteps),
+          stopWhen: [isStepCount(maxSteps - steps.length), () => binding.review?.settled === true],
           providerOptions: { openai: { store: false, parallelToolCalls: false } },
           prepareStep: async () => {
             signal.throwIfAborted();
-            return { instructions: await abortable(binding.instructions(), signal), activeTools: binding.activeTools?.() };
+            const instructions = await abortable(binding.instructions(), signal);
+            // Reserve the last available step for an honest partial-result review.
+            const mustReview = forceReview || (binding.review?.required && steps.length >= maxSteps - 1);
+            forceReview = false;
+            return mustReview ? { instructions, activeTools: ['review_request'], toolChoice: { type: 'tool' as const, toolName: 'review_request' } }
+              : { instructions, activeTools: binding.activeTools?.() };
           },
           onToolExecutionStart: ({ toolCall }) => emit({ type: 'tool-start', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
           onToolExecutionEnd: ({ toolCall }) => emit({ type: 'tool-end', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
-          onStepEnd: step => { completed.push(...step.response.messages); },
-        });
-        const result = await abortable(agent.generate({ messages: [...boundedHistory(turns), user], abortSignal: signal }), signal);
-        const status = result.finishReason === 'stop' ? 'complete' : 'incomplete';
+          onStepEnd: step => {
+            steps.push(step);
+            completed.push(...step.response.messages);
+            binding.review?.recordStep({ calls: step.toolCalls, results: step.toolResults });
+          },
+        }).generate({ messages: [...boundedHistory(turns), user, ...toolHistory(completed)], abortSignal: signal });
+        let result = await abortable(run(), signal);
+        // A model text stop is not evidence that every requested outcome was handled.
+        // Continue the same turn with its receipts, under the SAME step/time budget.
+        while (binding.review?.required && !binding.review.settled && steps.length < maxSteps) {
+          forceReview = true;
+          result = await abortable(run(), signal);
+        }
+        const status = binding.review?.required ? (binding.review.complete ? 'complete' : 'incomplete')
+          : result.finishReason === 'stop' ? 'complete' : 'incomplete';
         const modelText = result.text || 'The request ended before a final reply. Check the action results before continuing.';
-        const text = binding.formatReply?.({ text: modelText, toolNames: result.steps.flatMap(step => step.toolCalls.map(call => call.toolName)) }) ?? modelText;
+        const text = binding.formatReply?.({ text: modelText, toolNames: steps.flatMap(step => step.toolCalls.map(call => call.toolName)) }) ?? modelText;
         // Follow-ups must remember the same confirmed reply shown to the user, not
         // a discarded model claim. Keep tool calls/results intact for API history.
-        const messages: ModelMessage[] = text === result.text ? result.responseMessages : [
-          ...result.responseMessages.flatMap((message): ModelMessage[] => {
-            if (message.role !== 'assistant') return [message];
-            if (typeof message.content === 'string') return [];
-            const content = message.content.filter(part => part.type !== 'text');
-            return content.length ? [{ ...message, content }] : [];
-          }),
+        const messages: ModelMessage[] = text === result.text ? completed : [
+          ...toolHistory(completed),
           { role: 'assistant', content: text },
         ];
         turns.push([user, ...messages]);
         return {
           text,
           status,
-          steps: result.steps.length,
+          steps: steps.length,
           finishReason: result.finishReason,
-          usage: { inputTokens: result.totalUsage.inputTokens, outputTokens: result.totalUsage.outputTokens, totalTokens: result.totalUsage.totalTokens },
-          tools: result.steps.flatMap(step => step.toolResults.map(item => ({ toolName: item.toolName, toolCallId: item.toolCallId, output: item.output }))),
+          usage: { inputTokens: steps.reduce((sum, step) => sum + (step.usage.inputTokens ?? 0), 0), outputTokens: steps.reduce((sum, step) => sum + (step.usage.outputTokens ?? 0), 0), totalTokens: steps.reduce((sum, step) => sum + (step.usage.totalTokens ?? 0), 0) },
+          tools: steps.flatMap(step => step.toolResults.map(item => ({ toolName: item.toolName, toolCallId: item.toolCallId, output: item.output }))),
         };
       } catch {
         // Keep completed tool receipts when a later model request fails. Never replay the turn automatically.
         const interrupted = signal.aborted;
-        turns.push([user, ...completed, { role: 'assistant', content:
+        turns.push([user, ...toolHistory(completed), { role: 'assistant', content:
           'This request was interrupted. Some actions may already have been applied. Inspect the current room before continuing; do not repeat completed actions.' }]);
         throw new AgentTurnError(interrupted ? 'cancelled' : 'request_failed', interrupted
           ? 'Request cancelled or timed out. Actions already applied remain in the room.'

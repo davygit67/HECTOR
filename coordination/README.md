@@ -4,6 +4,10 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Whole-request agent review — October 17
+
+The agent now tracks multipart outcomes through a structured completion review and continues supported pending work within one shared request budget. Accepted edits stay grounded in canonical receipts; unsupported assets and user handoffs remain explicit in the reply/status. Global subject-honesty constraints are retained for unfamiliar requested visuals. Full tool count is28; scene commands remain31. Validation:105agent checks and two final real OpenAI synthetic compositions pass. Custom figurative animation/poster generation remains unavailable. Agent-owned publication is coordinated with the concurrent canvas YouTube-controls work; neither task stages the other's files. See current owner notes for activation/publication.
+
 ## Current agent capability milestone — October 17
 
 The user approved implementing full interface operation, completed-adjustment memory, optimized context, rendered feedback and adaptable experiences. Canvas owns the canonical Studio/Memory contracts, host/IPC/browser adapters, manual-event capture, composition/memory UI and renderer observation. Agent owns27modeltools,31scene command adapters, context/routing, durable scoped learning and six preset recipes. Exact contracts are in src/shared/studio.ts; current validation/activation is tracked in each owner's status note. Implementation and integrated validation are complete:96agent tests,183root tests,11silent browser assertions, Memory UI create/edit/save/forget and a real OpenAI visual inspection of an isolated rendered scene. Root source commit822c96c and the agent follow-up are published together after separate owned-path reviews. Native IPC is built/typechecked; interactive native/Windows/physical hardware qualification remains pending. Normal idle/clean synchronization resumes after publication. Older publication pauses below are historical and released.

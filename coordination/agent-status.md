@@ -2,6 +2,18 @@
 
 Owner: **Define projection content layer** (`01a13305-d81f-7c63-b810-5326284f56ac`).
 
+## Delivered — whole-request completion, October 17
+
+User's screenshot combined a Celtics video/backlight at30%roomfill, a leprechaun/clover border and a Tatum poster. The formatter discarded model explanations whenever a scene edit succeeded; termination depended on a text stop rather than whole-request coverage. Focused context could also drop subject-honesty rules when a requested subject matched no supported art keyword.
+
+Implemented agent-local review_request (28full tools;31scene commands unchanged). It tracks stable requested outcomes, validates completed items against successful current-turn action receipts, rejects search/failed/handoff evidence, and prevents dropping known requirements. After an early text stop, the same turn resumes supported pending work under one shared budget; no replay of accepted edits. Explicit blocked/handoff/pending explanations survive alongside canonical accepted-state confirmations. Overall status stays incomplete when unresolved. Interrupted/premature success prose is stripped from follow-up history. Global subject constraints now remain present for unfamiliar subjects; no unsolicited note/emoji/preset placeholders. Video identity remains in the summary when its backlight is subsequently configured. No root/schema/dependency changes.
+
+Default budget is12steps/90seconds; migrated only old6/45sdefaults in ignored local agent/.env, preserving credentials and customized values. No environment content was printed or staged. This is model-based interpretation/review with deterministic receipt gates, not a guarantee of semantic/visual perfection and not custom asset generation.
+
+Validation:105agent tests, typecheck and bundle build pass, including early-stop continuation, missing-art explanations, forged/failed/handoff receipts, dropped requirements, shared budget, incomplete review, context retention, memory reads and cancellation during forced review. Two final real OpenAI synthetic-scene checks passed: screenshot prompt applied grounded fixture video +.3roomFill and explicitly reported both missing assets; a supported request created a note, running3-minute timer, moving stars and70%timeropacity. Search was a fixed fixture; no live playback or generated imagery was tested. An initial live run added an extra asset, prompting the global subject/placeholder guard; final checks passed after that change. No user scene or player was connected to these tests.
+
+Canvas is concurrently implementing native YouTube controls. Its existing preview host remains running and it handles UI refresh/activation. New conversations use build-versioned agent imports. Scoped owned-file publication pending coordination; no broad staging or live restart by agent.
+
 ## Delivered — capable agent implementation, October 17
 
 User approved all five areas: interface parity, manual-correction memory, optimized context, visual feedback and adaptable experiences. Shared Studio/Memory contracts agreed with canvas task in src/shared/studio.ts; each task retained owned files. Canvas completed app/host/UI integration and verification. No live scene/source/runtime mutation by this agent task.

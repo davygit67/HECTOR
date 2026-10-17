@@ -30,9 +30,9 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
   return {
     apiKey,
     model: env.OPENAI_MODEL?.trim() || DEFAULT_MODEL,
-    maxSteps: integer(env, 'AGENT_MAX_STEPS', 6, 1, 20),
+    maxSteps: integer(env, 'AGENT_MAX_STEPS', 12, 1, 20),
     maxOutputTokens: integer(env, 'AGENT_MAX_OUTPUT_TOKENS', 1500, 128, 16000),
-    timeoutMs: integer(env, 'AGENT_TIMEOUT_MS', 45000, 1000, 120000),
+    timeoutMs: integer(env, 'AGENT_TIMEOUT_MS', 90000, 1000, 120000),
     historyTurns: integer(env, 'AGENT_HISTORY_TURNS', 10, 1, 30),
   };
 }
