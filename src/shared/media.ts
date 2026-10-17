@@ -1,7 +1,7 @@
 import type { BacklightSample } from './backlight.js';
 import { homography, type Point, type Quad } from './geometry.js';
 
-/** Transient host-owned pixels. Never persisted in the scene or exposed to the AI. */
+/** Transient host-owned pixels. Never persisted in the scene or sent wholesale to the agent; bounded composited observations use a separate on-demand port. */
 export interface MediaState {
   contentId: string; generation: number; ready: boolean; playing: boolean; hasPlayed: boolean; muted: boolean;
   status: string; currentTime: number; duration: number;

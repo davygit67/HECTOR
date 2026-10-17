@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatBridge } from './chatBridge';
+import { AssistantMemory } from './AssistantMemory';
 import { CHAT_MESSAGE_LIMIT, type ChatState } from './shared/chat';
 
 const DRAFT_KEY = 'projection-mapper.chat-draft';
@@ -54,5 +55,6 @@ export function ChatPanel() {
       </div>
     </form>
     <p className="chat-footnote">Edits appear live. Clear conversation keeps your canvas. Room geometry is simulated.</p>
+    <AssistantMemory />
   </section>;
 }

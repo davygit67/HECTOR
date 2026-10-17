@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { CanvasRpc } from '../src/shared/chat.js';
+type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 /** One broker per studio connection. Receipts are never replayed after a lost connection. */
 export function createCanvasRpc(send: (request: CanvasRpc) => void, timeoutMs = 10000, onFault: () => void = () => {}) {
   const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   let closed = false;
   return {
-    request<T>(operation: Omit<Extract<CanvasRpc, { operation: 'snapshot' }>, 'id'> | Omit<Extract<CanvasRpc, { operation: 'dispatch' }>, 'id'>): Promise<T> {
+    request<T>(operation: WithoutId<CanvasRpc>): Promise<T> {
       if (closed) return Promise.reject(new Error('Studio disconnected.'));
       return new Promise((resolve, reject) => {
         const id = randomUUID();

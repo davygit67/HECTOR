@@ -11,6 +11,7 @@ export type CommandReceipt = { ok: true; scene: Scene } | { ok: false; error: st
 export interface Bridge {
   getSnapshot(): Promise<Snapshot>;
   dispatch(command: Command): Promise<CommandReceipt>;
+  batch?(commands: Command[], expectedRevision: number): Promise<CommandReceipt>;
   output(command: OutputCommand): Promise<void>;
   subscribe(listener: (snapshot: Snapshot) => void): () => void;
 }

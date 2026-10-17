@@ -1,4 +1,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+contextBridge.exposeInMainWorld('projectionLibrary', {
+  read: () => ipcRenderer.invoke('library:read'),
+  write: items => ipcRenderer.invoke('library:write', items),
+});
 
 contextBridge.exposeInMainWorld('projectionAssets', {
   store: (file, mimeType) => ipcRenderer.invoke('assets:store', webUtils.getPathForFile(file), mimeType),
@@ -9,6 +13,7 @@ contextBridge.exposeInMainWorld('projectionAssets', {
 contextBridge.exposeInMainWorld('projection', {
   getSnapshot: () => ipcRenderer.invoke('scene:get'),
   dispatch: command => ipcRenderer.invoke('scene:command', command),
+  batch: (commands, expectedRevision) => ipcRenderer.invoke('scene:batch', commands, expectedRevision),
   output: command => ipcRenderer.invoke('output:command', command),
   subscribe: listener => {
     const handler = (_event, snapshot) => listener(snapshot);
@@ -22,11 +27,21 @@ contextBridge.exposeInMainWorld('projectionChat', {
   send: prompt => ipcRenderer.invoke('chat:send', prompt),
   cancel: () => ipcRenderer.invoke('chat:cancel'),
   clear: () => ipcRenderer.invoke('chat:clear'),
+  memory: request => ipcRenderer.invoke('chat:memory', request),
   subscribe: listener => {
     const handler = (_event, state) => listener(state);
     ipcRenderer.on('chat:state', handler);
     return () => ipcRenderer.removeListener('chat:state', handler);
   },
+});
+
+contextBridge.exposeInMainWorld('projectionStudio', {
+  subscribe: listener => {
+    const handler = (_event, request) => listener(request);
+    ipcRenderer.on('studio:rpc', handler);
+    return () => ipcRenderer.removeListener('studio:rpc', handler);
+  },
+  reply: reply => ipcRenderer.send('studio:reply', reply),
 });
 
 

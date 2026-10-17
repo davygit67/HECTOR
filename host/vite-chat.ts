@@ -3,6 +3,7 @@ import { createChatController, localAgentFactory } from './chat-controller';
 import { createCanvasRpc } from './canvas-rpc';
 import type { CommandReceipt, Snapshot } from '../src/shared/bridge';
 import type { ChatRequest } from '../src/shared/chat';
+import type { StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio';
 
 /** Dev-only, private HMR messages. Keys and the SDK stay in the Node process. */
 export function projectionChat(): Plugin {
@@ -38,6 +39,11 @@ export function projectionChat(): Plugin {
         controller = createChatController({
           getSnapshot: () => rpc.request<Snapshot>({ operation: 'snapshot' }),
           dispatch: command => rpc.request<CommandReceipt>({ operation: 'dispatch', command }),
+          studio: {
+            inspect: () => rpc.request<StudioSnapshot>({ operation: 'studio.inspect' }),
+            execute: request => rpc.request<StudioResult>({ operation: 'studio.execute', request }),
+            observe: request => rpc.request<StudioObservation>({ operation: 'studio.observe', request }),
+          },
         }, factory, state => client.send('pm:chat-state', state));
         sessions.set(client.socket, { controller, rpc, origin });
       });
@@ -50,6 +56,7 @@ export function projectionChat(): Plugin {
         if (!session) { reply(undefined, 'Reconnect the local studio to use chat.'); return; }
         try {
           if (data.action === 'state') reply(await session.controller.getState());
+          else if (data.action === 'memory' && data.memory) reply(await session.controller.memory(data.memory));
           else if (data.action === 'cancel') { session.controller.cancel(); reply(); }
           else if (data.action === 'clear') { session.controller.clear(); reply(); }
           else if (data.action === 'send') {

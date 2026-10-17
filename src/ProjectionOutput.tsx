@@ -9,7 +9,7 @@ import './projection-output.css';
 import { manualAlignment } from './shared/manualAlignment';
 
 type PresentationMode = 'align' | 'project';
-export interface ProjectionOutputHandle { enter(mode?: PresentationMode): void }
+export interface ProjectionOutputHandle { enter(mode?: PresentationMode): void; exit(): void }
 
 /** One fixed output viewport: alignment only adds overlays, never changes the geometry. */
 export const ProjectionOutput = forwardRef<ProjectionOutputHandle, {
@@ -64,7 +64,7 @@ export const ProjectionOutput = forwardRef<ProjectionOutputHandle, {
     if (document.fullscreenElement === screen.current) void document.exitFullscreen().catch(() => {});
     if (!standalone) returnToEditor();
   };
-  useImperativeHandle(ref, () => ({ enter }));
+  useImperativeHandle(ref, () => ({ enter, exit: () => { returnToEditor(); if (document.fullscreenElement) void document.exitFullscreen(); } }));
   useEffect(() => {
     if (!active || !screen.current) return;
     const siblings = Array.from(screen.current.parentElement?.children ?? []).filter(node => node !== screen.current) as HTMLElement[];

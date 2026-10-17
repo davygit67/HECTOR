@@ -16,6 +16,9 @@ import { ProjectionOutput, type ProjectionOutputHandle } from './ProjectionOutpu
 import './spatial.css';
 import { configureLocalMedia, importMedia, removeMediaAsset } from './localMedia';
 import { LayerControls, DisplayControls } from './LayerControls';
+import { registerStudioUI } from './studioRuntime';
+import { CompositionLibrary } from './CompositionLibrary';
+import type { StudioOperation } from './shared/studio';
 
 type Mode = 'room' | 'arrange' | 'align';
 type Inspector = 'assistant' | 'surface' | 'content' | 'projectors' | 'viewer';
@@ -34,6 +37,7 @@ export function SpatialStudio() {
   const [showPreviews, setShowPreviews] = useState(false);
   const [page, setPage] = useState<'studio' | 'hardware'>(() => location.hash === '#hardware' ? 'hardware' : 'studio');
   const [hardwareOpened, setHardwareOpened] = useState(location.hash === '#hardware');
+  const [handoff, setHandoff] = useState<{ label: string; action: () => void } | null>(null);
   const [youtubeDraft, setYoutubeDraft] = useState<string | null>(null), [youtubeError, setYoutubeError] = useState('');
   const query = new URLSearchParams(location.search), clean = query.get('view') === 'output';
   useEffect(() => {
@@ -67,6 +71,18 @@ export function SpatialStudio() {
   }, [snapshot?.scene]);
   const send = (command: Command) => { if (command.type === 'timer.select' || command.type === 'content.select') { setInspector('content'); setExpandedAssetId(command.id); } return bridge.dispatch(command).then(result => { setError(result.ok ? null : result.error ?? 'The change could not be applied.'); return result; }).catch(e => setError(String(e))); };
   const openOutput = (action: 'open' | 'fullscreen' | 'windowed' = 'open', displayId?: string) => bridge.output({ action, displayId }).catch(e => setError(String(e)));
+  const uiState = useRef({ page, mode, inspector, coverage, showPreviews, playing }); uiState.current = { page, mode, inspector, coverage, showPreviews, playing };
+  useEffect(() => {
+    if (clean) return;
+    return registerStudioUI({
+      state: () => ({ page: uiState.current.page, view: uiState.current.mode, inspector: uiState.current.inspector, fullscreen: !!document.fullscreenElement, coverage: uiState.current.coverage, previews: uiState.current.showPreviews, interact: uiState.current.playing }),
+      navigate: (operation: Extract<StudioOperation, { type: 'ui.navigate' }>) => { navigate(operation.page); if (operation.view) setMode(operation.view); if (operation.inspector) setInspector(operation.inspector); },
+      configure: operation => { if (operation.coverage !== undefined) setCoverage(operation.coverage); if (operation.previews !== undefined) setShowPreviews(operation.previews); if (operation.interact !== undefined) setPlaying(operation.interact); if (operation.resetView) setReset(n => n + 1); if (operation.expandedAssetId !== undefined) { setExpandedAssetId(operation.expandedAssetId); setInspector('content'); } },
+      handoff: (label, action) => setHandoff({ label, action }),
+      importAsset: () => mediaInput.current?.click(),
+      present: mode => mode === 'exit' ? presentation.current?.exit() : presentation.current?.enter(mode),
+    });
+  }, [clean]);
   if (!snapshot) return <div className="loading">{error ?? 'Opening your spatial studio…'}</div>;
   const { scene } = snapshot;
   if (clean) return <ProjectionOutput alignmentSession="studio" scene={scene} now={now} standalone send={send} issue={error || snapshot.saveError} saveStatus={snapshot.saveStatus} />;
@@ -88,6 +104,7 @@ export function SpatialStudio() {
     setMode('arrange'); setInspector('content'); setPlaying(false);
   };
   return <div className="studio spatial-studio">
+    {handoff && <div className="studio-handoff" role="status"><span>The assistant prepared this action.</span><button className="secondary" onClick={async () => { try { await handoff.action(); setHandoff(null); } catch (e) { setError(e instanceof Error ? e.message : 'This action could not be completed.'); } }}>{handoff.label}</button><button aria-label="Dismiss prepared action" onClick={() => setHandoff(null)}>×</button></div>}
     <input ref={mediaInput} type="file" aria-label="Upload local media file" hidden accept="video/*,image/*,.mp4,.webm,.mov,.mkv" disabled={importingMedia} onChange={async event => {
       const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
       setImportingMedia(true); setError(null); let assetId: string | undefined;
@@ -169,7 +186,7 @@ export function SpatialStudio() {
             <span className="eyebrow">POSITION IN ROOM</span><div className="position-grid"><NumberField label="X" value={round(surface.origin[0])} min={-5} max={5} step={.1} suffix="m" onCommit={n => editPosition(0, n)} /><NumberField label="Y / height" value={round(surface.origin[1])} min={0} max={4} step={.05} suffix="m" onCommit={n => editPosition(1, n)} /><NumberField label="Z" value={round(surface.origin[2])} min={-5} max={5} step={.1} suffix="m" onCommit={n => editPosition(2, n)} /></div>
             <button className="secondary full-width" onClick={() => setMode('arrange')}>Arrange content on {surface.name.toLowerCase()}</button><p className="hint">Moving this surface carries its content with it. Projector footprints are recomputed.</p>
           </>}
-          {inspector === 'content' && <ContentInventory scene={scene} now={now} expandedId={expandedAssetId} onExpand={setExpandedAssetId} send={send} onPlay={() => { setMode('arrange'); setPlaying(true); }} />}
+          {inspector === 'content' && <><ContentInventory scene={scene} now={now} expandedId={expandedAssetId} onExpand={setExpandedAssetId} send={send} onPlay={() => { setMode('arrange'); setPlaying(true); }} /><CompositionLibrary /></>}
           {inspector === 'projectors' && <><span className="eyebrow">PROJECTOR COVERAGE</span><h3>Two angles. One scene.</h3><p className="hint">Move or disable an output. Content stays in place while the overlap weights change.</p>{scene.projectors.map(p => <div className="projector-control" key={p.id}><label className="projector-toggle"><span><i style={{ background: p.color }} />{p.name}</span><input aria-label={`${p.name} enabled`} type="checkbox" checked={p.enabled} onChange={e => send({ type: 'projector.update', id: p.id, enabled: e.target.checked })} /></label>
             <label className="range-field"><span>Horizontal position <strong>{p.position[0].toFixed(1)} m</strong></span><input aria-label={`${p.name} horizontal position`} type="range" min={-3} max={3} step={.1} value={p.position[0]} onChange={e => send({ type: 'projector.update', id: p.id, position: [Number(e.target.value), p.position[1], p.position[2]] })} /></label>
             <NumberField label={`${p.name} height`} value={round(p.position[1])} min={1} max={4} step={.1} suffix="m" onCommit={n => send({ type: 'projector.update', id: p.id, position: [p.position[0], n, p.position[2]] })} />

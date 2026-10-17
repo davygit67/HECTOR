@@ -1,0 +1,14 @@
+.studio-tools { border-top: 1px solid #d9dfd0; margin-top: 20px; padding-top: 16px; }
+.studio-tools summary { cursor: pointer; font-weight: 600; padding: 8px 0; color: #3d6146; }
+.studio-tools summary small { display: inline-block; margin-left: 8px; color: #7b8874; font-weight: 400; }
+.studio-tools .field { margin-top: 12px; }
+.studio-tools .tool-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.tool-toggle input { width: 18px; height: 18px; }
+.tool-list { list-style: none; margin: 12px 0; padding: 0; }
+.tool-list li { background: #f0f2eb; border: 1px solid #dce1d5; border-radius: 10px; padding: 12px; margin: 8px 0; overflow-wrap: anywhere; }
+.tool-list p { margin: 0 0 6px; white-space: pre-wrap; }
+.tool-list small { display: block; color: #7b8874; margin: 6px 0; }
+.tool-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.tool-actions button { border: 1px solid #ccd6c6; border-radius: 6px; padding: 7px 12px; background: #fffefa; color: #3d6146; cursor: pointer; }
+.tool-error { color: #98551f; padding: 10px; background: #fff0d9; border-radius: 6px; }
+.studio-handoff { display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: #edf3e5; border: 1px solid #cbd8bf; border-radius: 12px; margin: 12px 0; }

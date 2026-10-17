@@ -27,7 +27,7 @@ const artwork = new Map<string, Artwork>();
 const masks = new Map<string, { stamp: number; texture: THREE.DataTexture }>();
 
 /** Shared procedural state is evaluated from room position and one persisted time origin. */
-function getArtwork(scene: Scene, surface: Surface, now: number, withTimers = true, liveVideos = false, TEX_W = 768, backgroundOnly = false) {
+export function getArtwork(scene: Scene, surface: Surface, now: number, withTimers = true, liveVideos = false, TEX_W = 768, backgroundOnly = false) {
   const TEX_H = TEX_W * 9 / 16;
   const key = `${surface.id}:${withTimers}:${liveVideos}:${scene.showGrid}:${TEX_W}:${backgroundOnly}`;
   let record = artwork.get(key);

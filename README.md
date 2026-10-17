@@ -69,6 +69,20 @@ The panel shows progress and a final reply. **Stop request** cancels remaining w
 
 Only one AI turn runs per browser room origin at a time. Use one studio tab for editing. Browser and desktop have independent conversations and stores. Lost canvas receipts stop the active turn and prevent subsequent edits in it; commands are never automatically replayed. Check the visible canvas before retrying.
 
+## Agent controls, memory and saved compositions
+
+The agent now uses the same validated scene operations as Studio for placement, size, layers, visibility, opacity, media presentation, manual alignment, projector/viewer settings and display controls. Studio actions also expose the existing inspector/view toggles, YouTube source controls, output commands and hardware connection/record/replay/pattern/capture workflow. Browser fullscreen and file pickers appear as a prepared button in the main interface when a real click is required. Source-window login remains a human action. The retired matrix demo stays unavailable.
+
+Open **AI → Assistant memory** to review, edit or forget preferences and accepted examples. **Use and learn from memory** pauses both recording and retrieval when off; stored entries remain. Completed manual adjustments are coalesced into bounded records rather than recording every pointer frame. Agent changes are not attributed to the user. Calibration records remain setup facts, not aesthetic preferences. This is retrieval of local examples, not model training or reinforcement learning. Save failures stay visible and never undo the manual canvas edit.
+
+Open **Content → Saved compositions** to save or recall a complete arrangement. Recall replaces the scene's assets and lighting while retaining current physical geometry/manual alignment, and starts media paused with sound muted. Changed surface shapes are rejected instead of applying an obsolete layout. Saved local-media references require the files to remain on this device; saving a composition does not package media for another computer. The library holds up to 20 compositions.
+
+The agent can request a bounded rendered surface image with its scene/geometry revision, source readiness, save/output status and an explicit stale flag. It reuses the existing compositor, including native source frames when available. Unavailable frames are labeled; a placeholder does not prove playback. These are software previews, not camera measurements of focus, physical alignment or brightness. Video decoding, animation and backlight processing remain local and do not run through the language model.
+
+The coordinated agent supplies 27 typed tools, selective tool/context retrieval, persistent scoped memory and adaptable experiences such as immersive music, underwater art, cooking and tabletop play. Ask it to list the available experiences. It still cannot solve measured room geometry, authenticate accounts, generate arbitrary executable games or bypass browser/player permissions.
+
+Desktop compositions and per-room memory are saved under the private data directory; desktop room identity survives the local server's changing port. Browser compositions and room identity belong to that browser origin, with agent memory stored privately by the local host. New conversations load the latest completed agent build. Refresh Studio after an update; relaunch the native app to activate rebuilt native IPC code. No API key is sent to the renderer.
+
 ## Explore the spatial canvas
 
 1. In **3D room**, drag to orbit, scroll to zoom, or click a surface. The editor camera is independent of the human viewpoint.
@@ -88,7 +102,7 @@ The manual adapter uses a 1920 × 1080 logical canvas with letterboxing. It maps
 
 ## Current limits
 
-- Geometry, dimensions, projector poses and the viewer are simulated. Kinect capture, measured surface discovery, automatic calibration and boundary editing remain future work.
+- Geometry, dimensions, projector poses and the viewer are simulated. The sensor capture/record/replay software exists, but native Windows/Kinect qualification, measured surface discovery and automatic calibration remain unverified or future work.
 - Visibility uses plane occlusion and sampled 128 × 128 weight masks. Overlap is nominal, without measured brightness/gamma/black-level matching or hardware synchronization.
 - The 3D views share 768 × 432 surface textures; procedural artwork updates at 20 Hz. These are preview limits, not native projector resolution claims.
 - Chat is typed. Voice, other streaming providers, generated images, general generated games and motion interaction are not implemented.
@@ -117,7 +131,7 @@ Schema v1/v2 saves migrate to v3 while preserving timer identity/deadlines, geom
 | `host/chat-controller.ts` | One SDK conversation bound to the existing scene port |
 | `host/vite-chat.ts`, `canvas-rpc.ts`, `src/chatBridge.ts` | Local browser connection, correlated replies, cancellation |
 | `electron/main.ts`, `electron/preload.cjs` | Desktop scene authority, persistence, isolated scene/chat IPC |
-| `agent/` | Vercel AI SDK orchestration and seventeen typed tools, including YouTube search |
+| `agent/` | Vercel AI SDK orchestration, 27 typed tools, scoped memory and adaptable experiences |
 
 Validation: all 65 app tests and production build pass. Browser checks covered each content type, artwork attachment/pause, recipe navigation, complete game scoring and reload, note editing, clean output, real AI edit/follow-up, cancellation and clearing chat without clearing the room. The agent task separately passed 34 tests and a real creation/follow-up against the shared reducer. Live browser checks used an isolated localhost origin, preserving the user's 127.0.0.1 scene. Electron wiring is typechecked and shares the tested controller; its new chat IPC path and native projector switching still need interactive desktop/hardware validation.
 

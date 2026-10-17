@@ -1,6 +1,9 @@
 import { initialScene, readScene, reduceScene } from './shared/domain';
 import type { Bridge, Snapshot } from './shared/bridge';
 import { isOutputCalibrationCommand } from './shared/outputPermissions';
+import { reduceBatch } from './shared/studioScene';
+import { adjustmentFor } from './shared/adjustments';
+import { recordAdjustment, roomId } from './manualEvents';
 
 declare global { interface Window { projection?: Bridge } }
 
@@ -43,6 +46,17 @@ function browserBridge(): Bridge {
         channel.postMessage('changed'); emit(); return { ok: true, scene: structuredClone(scene) };
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
     },
+    batch: async (commands, expectedRevision) => {
+      if (new URLSearchParams(location.search).get('view') === 'output') return { ok: false, error: 'Use the studio to edit the composition.' };
+      try {
+        const raw = localStorage.getItem(key); if (raw && raw !== lastSavedRaw) { scene = readScene(JSON.parse(raw)); lastSavedRaw = raw; }
+        const next = reduceBatch(scene, commands, expectedRevision);
+        scene = next;
+        try { const saved = JSON.stringify(scene); localStorage.setItem(key, saved); lastSavedRaw = saved; error = null; }
+        catch { error = 'Browser storage is full or unavailable; this layout is not saved.'; }
+        channel.postMessage('changed'); emit(); return { ok: true, scene: structuredClone(scene) };
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    },
     output: async () => {
       outputWindow = window.open(`${location.origin}${location.pathname}?view=output`, 'projection-output', 'width=960,height=540');
       if (!outputWindow) throw new Error('Allow popups to open the projection preview.');
@@ -52,4 +66,15 @@ function browserBridge(): Bridge {
   };
 }
 
-export const bridge = window.projection ?? browserBridge();
+const rawBridge = window.projection ?? browserBridge();
+/** Agent execution deliberately bypasses manual demonstration recording. */
+export const agentDispatch = rawBridge.dispatch;
+export const agentBatch = rawBridge.batch;
+export const bridge: Bridge = { ...rawBridge, dispatch: async command => {
+  const before = await rawBridge.getSnapshot(), result = await rawBridge.dispatch(command);
+  if (result.ok) {
+    try { const event = adjustmentFor(command, before.scene, result.scene, roomId(), crypto.randomUUID()); if (event) recordAdjustment(event); }
+    catch { /* Memory storage must never prevent a manual edit. */ }
+  }
+  return result;
+} };

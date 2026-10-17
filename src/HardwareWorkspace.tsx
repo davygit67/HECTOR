@@ -9,6 +9,7 @@ import { demoSensor, localSensor, type LocalSensorMode, type SensorSource } from
 import { PatternOutputClient, paintPattern } from './patternOutput';
 import { deleteSensorSession, downloadSensorSession, listSensorSessions, loadSensorSession, saveSensorSession, type SessionSummary } from './sensorSessions';
 import './hardware.css';
+import { registerHardware } from './studioRuntime';
 
 type SourceMode = 'demo' | 'live' | 'replay';
 type Recording = { session: SensorSession; endAt: number; nextAt: number; lastSequence: number };
@@ -35,6 +36,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const sessionOperation = useRef(false);
   const [error, setError] = useState('');
   const previewAt = useRef(0);
+  const importInput = useRef<HTMLInputElement>(null);
   const busy = capturing || isRecording || saving || presentingManual || loadingSession;
   const [width, height] = resolution.split('x').map(Number), patterns = useMemo(() => patternSequence(width, height, sequenceKind), [width, height, sequenceKind]);
   const outputs = [...(output.current?.outputs.values() ?? [])];
@@ -98,11 +100,11 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     setLiveFrame(null); setBridgeMode(null); setConnection('disconnected'); setConnectionMessage('Source disconnected.');
   }
   function changeSource(mode: SourceMode) { disconnect(); setReplayPlaying(false); setSourceMode(mode); setError(''); if (mode === 'live') setOutputTarget('output'); }
-  function connect() {
+  function connect(mode = sourceMode) {
     setError(''); disconnect();
-    if (sourceMode === 'demo') {
+    if (mode === 'demo') {
       source.current = demoSensor(inbox, () => activePattern.current); setConnection('connected'); setConnectionMessage('Generated RGB and depth · no physical sensor');
-    } else if (sourceMode === 'live') {
+    } else if (mode === 'live') {
       try { source.current = localSensor(inbox, address, (status, message, mode) => {
         setConnection(status); setConnectionMessage(message); setBridgeMode(mode);
         if (status !== 'connected') { setLiveFrame(null); setReceivedAt(0); if (recording.current) finishRef.current(message || 'Sensor connection changed. Partial recording retained.'); }
@@ -111,10 +113,10 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
       catch (e) { setConnection('error'); setConnectionMessage(describeError(e)); }
     }
   }
-  function startRecording() {
+  function startRecording(seconds = duration) {
     if (!canAcquire || busy) return;
     setError(''); setRecordCount(0); setIsRecording(true);
-    recording.current = { endAt: Date.now() + duration * 1000, nextAt: 0, lastSequence: -1, session: { version: 1, id: crypto.randomUUID(), name: sessionName(sourceMode === 'demo' ? 'Demo recording' : 'Sensor recording'),
+    recording.current = { endAt: Date.now() + seconds * 1000, nextAt: 0, lastSequence: -1, session: { version: 1, id: crypto.randomUUID(), name: sessionName(sourceMode === 'demo' ? 'Demo recording' : 'Sensor recording'),
       createdAtMs: Date.now(), kind: 'recording', provenance: sourceMode === 'demo' ? 'synthetic' : 'sensor', status: 'complete', message: '', frames: [], captures: [], plannedPatterns: [] } };
   }
   async function present(next: CalibrationPattern, signal: AbortSignal) {
@@ -141,11 +143,12 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     await retain(session);
   }
   async function manualPattern(kind: 'white' | 'black' | 'grid') {
-    if (busy) return;
+    if (busy) return false;
     setError(''); setPresentingManual(true); const abort = new AbortController(); controller.current = abort;
     try { await present({ id: `manual-${kind}`, kind, width, height }, abort.signal); }
-    catch (e) { setError(describeError(e)); clearPattern(); }
+    catch (e) { setError(describeError(e)); clearPattern(); return false; }
     finally { controller.current = null; setPresentingManual(false); }
+    return true;
   }
   async function openSession(id: string) {
     if (busy || sessionOperation.current) return;
@@ -166,6 +169,46 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     finally { sessionOperation.current = false; if (mounted.current) setLoadingSession(false); }
   }
   const actualOutput = outputs.find(item => item.visible);
+  useEffect(() => registerHardware({
+    status: () => ({ initialized: true, mode: sourceMode, connection, message: error || connectionMessage,
+      provenance: sourceMode === 'demo' || bridgeMode === 'demo' ? 'synthetic' : sourceMode === 'replay' || bridgeMode === 'replay' ? 'replay' : bridgeMode === 'live' ? 'sensor' : 'unknown',
+      busy, canAcquire, frames: recordCount, recording: isRecording, capturing,
+      sessions: sessions.map(({ id, name, provenance, frames }) => ({ id, name, provenance, frames })), geometrySolved: false,
+      settings: { address, resolution: resolution as '1920x1080', sequence: sequenceKind, settleMs: settleMs as 300, outputTarget: outputTarget as 'demo' | 'output', replayRate: replayRate as 1, replayIndex } }),
+    execute: async command => {
+      if (!command || typeof command !== 'object') throw new Error('Choose a hardware action.');
+      if (command.action === 'cancel-capture') { controller.current?.abort(); return 'Capture cancellation requested. Existing captured frames are retained.'; }
+      if (command.action === 'stop-recording') { finishRecording(); return 'Recording stopped. Inspect storage status before claiming it is saved.'; }
+      if (busy) throw new Error('Finish the active hardware operation first.');
+      switch (command.action) {
+        case 'configure': {
+          const s = command.settings;
+          if (!s || Object.keys(s).some(k => !['address','resolution','sequence','settleMs','outputTarget','replayRate','replayIndex'].includes(k))) throw new Error('Unknown hardware setting.');
+          if (s.address !== undefined) { const url = new URL(s.address); if (connectionOpen || !['ws:', 'wss:'].includes(url.protocol) || !['127.0.0.1','localhost','[::1]'].includes(url.hostname) || url.username || url.password) throw new Error('Disconnect before changing the local sensor address. Use a loopback WebSocket address.'); }
+          if (s.resolution !== undefined && !['1920x1080','1280x720','640x480'].includes(s.resolution) || s.sequence !== undefined && !['gray','checks'].includes(s.sequence)
+            || s.settleMs !== undefined && ![150,300,750,1500].includes(s.settleMs) || s.outputTarget !== undefined && !['demo','output'].includes(s.outputTarget)
+            || s.replayRate !== undefined && ![.25,1,2].includes(s.replayRate) || s.replayIndex !== undefined && (!selected || !Number.isInteger(s.replayIndex) || s.replayIndex < 0 || s.replayIndex >= selected.frames.length)) throw new Error('Choose values supported by the hardware controls.');
+          if (s.address !== undefined) setAddress(s.address); if (s.resolution !== undefined) { clearPattern(); setResolution(s.resolution); }
+          if (s.sequence !== undefined) setSequenceKind(s.sequence); if (s.settleMs !== undefined) setSettleMs(s.settleMs); if (s.outputTarget !== undefined) { clearPattern(); setOutputTarget(s.outputTarget); }
+          if (s.replayRate !== undefined) setReplayRate(s.replayRate); if (s.replayIndex !== undefined) { setReplayPlaying(false); setReplayIndex(s.replayIndex); }
+          return 'Hardware settings updated.';
+        }
+        case 'import-session': importInput.current?.click(); return 'Choose a recording in the file picker.';
+        case 'download-session': if (!selected) throw new Error('Open a recording first.'); downloadSensorSession(selected); return 'Recording download requested.';
+        case 'remove-session': if (!sessions.some(s => s.id === command.id)) throw new Error('Recording not found.'); await deleteSensorSession(command.id); setSessions(await listSensorSessions()); if (selected?.id === command.id) { setSelected(null); setReplayPlaying(false); } return 'Recording deleted from this device.';
+        case 'connect-demo': case 'connect-live': { const mode = command.action === 'connect-demo' ? 'demo' : 'live'; setSourceMode(mode); setReplayPlaying(false); if (mode === 'live') setOutputTarget('output'); connect(mode); return 'Sensor connection requested. Inspect readiness and provenance before capture.'; }
+        case 'disconnect': disconnect(); return 'Sensor disconnected.';
+        case 'record': { const seconds = command.seconds ?? duration; if (!Number.isFinite(seconds) || seconds < 1 || seconds > 30) throw new Error('Choose a recording duration of 1–30 seconds.'); if (!canAcquire) throw new Error('A fresh live or in-app demo sensor is required.'); setDuration(seconds); startRecording(seconds); return 'Recording started.'; }
+        case 'open-session': if (!sessions.some(s => s.id === command.id)) throw new Error('Recording not found.'); await openSession(command.id); return 'Recording load requested. Inspect replay status.';
+        case 'play-replay': if (sourceMode !== 'replay' || !selected) throw new Error('Open a recorded session first.'); setReplayPlaying(true); return 'Replay started; these are recorded observations.';
+        case 'pause-replay': setReplayPlaying(false); return 'Replay paused.';
+        case 'clear-pattern': clearPattern(); return 'Projection content restored.';
+        case 'pattern': if (sourceMode === 'replay' || !['white', 'black', 'grid'].includes(command.pattern)) throw new Error('Choose a supported live/demo pattern.'); if (!await manualPattern(command.pattern)) throw new Error('Pattern could not be presented. Check the hardware panel.'); return 'Pattern presentation acknowledged; physical exposure is unverified.';
+        case 'capture': if (!canAcquire || outputTarget === 'output' && !actualOutput) throw new Error('Connect a fresh sensor and open a visible projection output first.'); void capture(); return 'Capture started. Inspect progress; no measured geometry has been solved.';
+        default: throw new Error('Unknown hardware action.');
+      }
+    },
+  }));
   return <main className="hardware-workspace" id="hardware-workspace">
     <div className="hardware-heading"><div><span className="eyebrow">PREPARE THE PHYSICAL ROOM</span><h2>Hardware setup</h2><p>See the sensor, record a session, and capture projection patterns.</p></div><span className="hardware-badge">{sourceMode === 'demo' ? 'Demo data' : sourceMode === 'replay' ? 'Recorded data' : bridgeMode === 'demo' ? 'Helper demo · view only' : bridgeMode === 'replay' ? 'Helper replay · view only' : 'Local sensor'}</span></div>
     <div className="hardware-intro"><strong>Your scene stays intact.</strong> Patterns temporarily replace the output image. They do not change your content, surfaces or manual alignment. Automatic geometry solving comes next.</div>
@@ -173,15 +216,15 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     <div className="hardware-columns">
       <section className="hardware-card sensor-card"><div className="hardware-card-title"><div><span className="eyebrow">01 / SENSOR INPUT</span><h3>What the camera sees</h3></div><span className={'sensor-status ' + (connected ? 'ready' : '')}>{sourceMode === 'replay' ? 'Replay' : connected ? 'Receiving frames' : connection === 'connecting' ? 'Connecting…' : connection === 'waiting' ? 'Waiting for sensor' : connection === 'ended' ? 'Replay finished' : 'Not connected'}</span></div>
         <div className="hardware-controls"><label className="field"><span>Source</span><select aria-label="Sensor source" value={sourceMode} disabled={busy} onChange={e => changeSource(e.target.value as SourceMode)}><option value="demo">Demo sensor</option><option value="live">Local Kinect / RGB-depth bridge</option><option value="replay">Recorded session</option></select></label>
-          {sourceMode !== 'replay' && <button className="primary" disabled={busy} onClick={connectionOpen ? disconnect : connect}>{connectionOpen ? 'Disconnect' : sourceMode === 'demo' ? 'Start demo sensor' : connection === 'error' || connection === 'ended' ? 'Reconnect sensor' : 'Connect sensor'}</button>}
+          {sourceMode !== 'replay' && <button className="primary" disabled={busy} onClick={() => connectionOpen ? disconnect() : connect()}>{connectionOpen ? 'Disconnect' : sourceMode === 'demo' ? 'Start demo sensor' : connection === 'error' || connection === 'ended' ? 'Reconnect sensor' : 'Connect sensor'}</button>}
         </div>
         {sourceMode === 'live' && <div className="hardware-source-note"><p>Start the sensor helper on this computer, then connect. The native Kinect helper targets Windows; physical capture still needs hardware verification. The helper’s demo and replay modes also work on Mac for testing the connection.</p>{bridgeMode && bridgeMode !== 'live' && <p>This is {bridgeMode === 'demo' ? 'generated data' : 'a recorded stream'}, not a live measurement. Recording and calibration capture are disabled. Use the in-app Demo sensor for simulated pattern captures.</p>}<label className="field"><span>Local bridge address</span><input aria-label="Local sensor bridge address" value={address} disabled={busy || connectionOpen} onChange={e => setAddress(e.target.value)} /></label></div>}
         <div className="sensor-previews"><SensorPreview frame={frame} kind="color" /><SensorPreview frame={frame} kind="depth" /></div>
         <p className="hardware-caption">{sourceMode === 'replay' ? selected ? `${selected.provenance === 'synthetic' ? 'Synthetic' : 'Sensor'} recording · original capture timing retained` : 'Choose or import a recording from the library.' : connectionMessage}</p>
         {frame && <div className="sensor-details"><span>Frame <strong>{frame.sequence}</strong></span><span>Color <strong>{frame.device.color.width} × {frame.device.color.height}</strong></span><span>Depth <strong>{frame.device.depth.width} × {frame.device.depth.height}</strong></span><span>Depth unit <strong>{frame.device.depthScaleMeters * 1000} mm</strong></span><span>Camera calibration <strong>{frame.device.colorIntrinsics && frame.device.depthIntrinsics ? 'Included' : 'Not supplied'}</strong></span></div>}
-        {sourceMode !== 'replay' ? <div className="recording-controls"><label className="field"><span>Record for</span><select aria-label="Recording duration" disabled={busy} value={duration} onChange={e => setDuration(Number(e.target.value))}><option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option></select></label><button className={isRecording ? 'secondary' : 'primary'} disabled={!isRecording && (!canAcquire || busy)} onClick={isRecording ? () => finishRecording() : startRecording}>{isRecording ? 'Stop & save recording' : 'Record session'}</button><span>{isRecording ? `${recordCount} frames · ${Math.max(0, Math.ceil(((recording.current?.endAt ?? clock) - clock) / 1000))}s left` : 'Up to 5 frames / second'}</span></div> : selected && <div className="replay-controls"><div><button className="primary" onClick={() => { if (replayIndex === selected.frames.length - 1) setReplayIndex(0); setReplayPlaying(p => !p); }}>{replayPlaying ? 'Pause replay' : 'Play replay'}</button><label className="field"><span>Speed</span><select aria-label="Replay speed" value={replayRate} onChange={e => setReplayRate(Number(e.target.value))}><option value={.25}>¼×</option><option value={1}>1×</option><option value={2}>2×</option></select></label><span>Frame {replayIndex + 1} of {selected.frames.length}</span></div><input aria-label="Replay frame" type="range" min={0} max={selected.frames.length - 1} value={replayIndex} onChange={e => { setReplayPlaying(false); setReplayIndex(Number(e.target.value)); }} /></div>}
+        {sourceMode !== 'replay' ? <div className="recording-controls"><label className="field"><span>Record for</span><select aria-label="Recording duration" disabled={busy} value={duration} onChange={e => setDuration(Number(e.target.value))}>{![5,10,30].includes(duration) && <option value={duration}>{duration} seconds</option>}<option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option></select></label><button className={isRecording ? 'secondary' : 'primary'} disabled={!isRecording && (!canAcquire || busy)} onClick={() => isRecording ? finishRecording() : startRecording()}>{isRecording ? 'Stop & save recording' : 'Record session'}</button><span>{isRecording ? `${recordCount} frames · ${Math.max(0, Math.ceil(((recording.current?.endAt ?? clock) - clock) / 1000))}s left` : 'Up to 5 frames / second'}</span></div> : selected && <div className="replay-controls"><div><button className="primary" onClick={() => { if (replayIndex === selected.frames.length - 1) setReplayIndex(0); setReplayPlaying(p => !p); }}>{replayPlaying ? 'Pause replay' : 'Play replay'}</button><label className="field"><span>Speed</span><select aria-label="Replay speed" value={replayRate} onChange={e => setReplayRate(Number(e.target.value))}><option value={.25}>¼×</option><option value={1}>1×</option><option value={2}>2×</option></select></label><span>Frame {replayIndex + 1} of {selected.frames.length}</span></div><input aria-label="Replay frame" type="range" min={0} max={selected.frames.length - 1} value={replayIndex} onChange={e => { setReplayPlaying(false); setReplayIndex(Number(e.target.value)); }} /></div>}
       </section>
-      <section className="hardware-card library-card"><div className="hardware-card-title"><div><span className="eyebrow">KEEP THE EVIDENCE</span><h3>Recordings</h3></div><label className={'hardware-file-button secondary ' + (busy ? 'disabled' : '')}>Import<input type="file" accept=".pmsession" aria-label="Import sensor recording" disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void importSession(file); }} /></label></div>
+      <section className="hardware-card library-card"><div className="hardware-card-title"><div><span className="eyebrow">KEEP THE EVIDENCE</span><h3>Recordings</h3></div><label className={'hardware-file-button secondary ' + (busy ? 'disabled' : '')}>Import<input ref={importInput} type="file" accept=".pmsession" aria-label="Import sensor recording" disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void importSession(file); }} /></label></div>
         <p className="hardware-caption">{storageNote}</p>
         <div className="session-list">{sessions.length ? sessions.map(item => <button key={item.id} disabled={busy} aria-pressed={selected?.id === item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => void openSession(item.id)}><strong>{item.name}</strong><span>{item.provenance === 'synthetic' ? 'Demo' : 'Sensor'} · {item.frames} frames · {sizeLabel(item.bytes)}</span><small>{item.kind === 'pattern-capture' ? 'Pattern capture' : 'Recording'} · {item.status}</small></button>) : <div className="session-empty">Your first recording will appear here.<br />Start the demo sensor to try it now.</div>}</div>
         {selected && <div className="selected-session"><strong>{selected.name}</strong><p>{selected.frames.length} frames · {sizeLabel(sessionBytes(selected))}{selected.captures.length ? ` · ${selected.captures.length}/${selected.plannedPatterns.length} patterns` : ''}</p>{selected.message && <p>{selected.message}</p>}<div className="hardware-actions"><button className="secondary" disabled={busy} onClick={() => { changeSource('replay'); setReplayIndex(0); }}>Review</button><button className="secondary" disabled={saving} onClick={() => { try { downloadSensorSession(selected); } catch (e) { setError(describeError(e)); } }}>Download</button><button className="hardware-text-button" disabled={busy} onClick={async () => { try { await deleteSensorSession(selected.id); setSessions(await listSensorSessions()); setSelected(null); setReplayPlaying(false); } catch (e) { setError(describeError(e)); } }}>Delete</button></div></div>}

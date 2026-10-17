@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { initialScene, readScene, reduceScene, type Command } from '../src/shared/domain.js';
 import { createChatController, localAgentFactory } from '../host/chat-controller.js';
+import { createCanvasRpc } from '../host/canvas-rpc.js';
+import { reduceBatch } from '../src/shared/studioScene.js';
+import type { MemoryRequest, StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio.js';
 import { startStaticPreview } from '../host/static-preview.js';
 import { LocalAssets } from '../host/local-assets.js';
 import { isChatCommand } from '../src/shared/chat.js';
@@ -74,10 +77,19 @@ function applyCommand(command: Command): CommandReceipt {
   try { scene = reduceScene(scene, command); media?.sync(scene); queueSave(); broadcast(); return { ok: true, scene: structuredClone(scene) }; }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
 }
+const studioRpc = createCanvasRpc(request => {
+  if (!control || control.isDestroyed()) throw new Error('Studio is not open.');
+  control.webContents.send('studio:rpc', request);
+}, 10000, () => chat.cancel());
 const chat = createChatController({
   getSnapshot: async () => structuredClone(snapshot()),
   dispatch: async command => isChatCommand(command) ? applyCommand(command) : { ok: false, error: 'That operation is not available to the assistant.' },
-}, localAgentFactory(root), value => {
+  studio: {
+    inspect: () => studioRpc.request<StudioSnapshot>({ operation: 'studio.inspect' }),
+    execute: request => studioRpc.request<StudioResult>({ operation: 'studio.execute', request }),
+    observe: request => studioRpc.request<StudioObservation>({ operation: 'studio.observe', request }),
+  },
+}, localAgentFactory(root, dataDir), value => {
   if (control && !control.isDestroyed()) control.webContents.send('chat:state', value);
 });
 function authorizeChat(event: IpcMainInvokeEvent) {
@@ -127,6 +139,13 @@ else {
     ipcMain.handle('assets:store', (event, path, mimeType) => { authorizeChat(event); return localAssets.store(path, mimeType); });
     ipcMain.handle('assets:resolve', (event, id) => { authorize(event); return localAssets.url(id); });
     ipcMain.handle('assets:remove', (event, id) => { authorizeChat(event); return localAssets.remove(id); });
+    const libraryFile = join(dataDir, 'compositions.json');
+    ipcMain.handle('library:read', event => { authorizeChat(event); return existsSync(libraryFile) ? JSON.parse(readFileSync(libraryFile, 'utf8')) : []; });
+    ipcMain.handle('library:write', (event, items: unknown) => {
+      authorizeChat(event);
+      if (!Array.isArray(items) || items.length > 20 || JSON.stringify(items).length > 1000000) throw new Error('Composition library exceeds its storage limit.');
+      writeFileSync(libraryFile + '.tmp', JSON.stringify(items), { encoding: 'utf8', mode: 0o600 }); renameSync(libraryFile + '.tmp', libraryFile);
+    });
     media = new MediaSources(assets.origin, join(root, 'electron/source-preload.cjs'), event => {
       for (const win of [control, output]) if (win && !win.isDestroyed()) win.webContents.send('media:event', event);
     });
@@ -140,6 +159,13 @@ else {
       if (event.sender !== control?.webContents && !isOutputCalibrationCommand(command)) return { ok: false, error: 'Use the studio to edit content. This window can adjust manual alignment.' };
       return applyCommand(command);
     });
+    ipcMain.handle('scene:batch', (event, commands: Command[], expectedRevision: number): CommandReceipt => {
+      authorizeChat(event);
+      try { scene = reduceBatch(scene, commands, expectedRevision); media?.sync(scene); queueSave(); broadcast(); return { ok: true, scene: structuredClone(scene) }; }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Could not apply composition.' }; }
+    });
+    ipcMain.on('studio:reply', (event, reply) => { if (event.sender === control?.webContents && event.senderFrame === event.sender.mainFrame) studioRpc.receive(reply); });
+    ipcMain.handle('chat:memory', (event, request: MemoryRequest) => { authorizeChat(event); return chat.memory(request); });
     ipcMain.handle('chat:get', event => { authorizeChat(event); return chat.getState(); });
     ipcMain.handle('chat:send', (event, prompt: string) => { authorizeChat(event); return chat.send(prompt); });
     ipcMain.handle('chat:cancel', event => { authorizeChat(event); chat.cancel(); });

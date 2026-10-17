@@ -18,10 +18,11 @@ function room() {
   };
   return { port, scene: () => scene };
 }
-test('chat transport allowlist matches the SDK and excludes geometry and player input', () => {
+test('chat transport allowlist matches the SDK and excludes gameplay injection and retired effects', () => {
   assert.deepEqual([...CHAT_COMMAND_TYPES].sort(), [...AGENT_COMMAND_TYPES].sort());
   assert.equal(isChatCommand({ type: 'game.hit' }), false);
-  assert.equal(isChatCommand({ type: 'surface.move' }), false);
+  assert.equal(isChatCommand({ type: 'surface.move' }), true);
+  assert.equal(isChatCommand({ type: 'effect.set' }), false);
   assert.equal(isChatCommand(null), false);
   assert.equal(isChatCommand({ type: 'content.create' }), true); // Payload still requires the reducer.
 });
