@@ -2,9 +2,9 @@
 
 Owner: **Define projection content layer** (`01a13305-d81f-7c63-b810-5326284f56ac`).
 
-## Implemented, integration/publication pending — Kinect measured table / agent fill, October 17
+## Published — Kinect measured table / agent fill, October 17
 
-Publication handoff: canvas reports195root tests/build plus synthetic measured-table/occluder and imported-scan UI checks passing. It granted this task an exclusive Git window to commit explicit owned files, without pushing; canvas will then commit its dependent root slice and push both together. No runtime restart or physical Windows validation. This supersedes the earlier Git hold below for this bounded commit only.
+Publication complete: agent/helper commit `ff7bc31` and dependent canvas commit `d71ce63` are on GitHub main. Independently verified local/origin/remote heads at `d71ce63` and a clean worktree. Canvas reports all 196 root tests, build, synthetic measured-table/occluder checks and imported-scan UI checks passing. No live host/agent-cache restart or physical Windows/RTAB export validation. The earlier Git hold below is released; normal idle/clean synchronization resumes. This note and the index receive a final owned documentation follow-up.
 
 Canvas task requested bounded agent/helper work for the user's now-connected Windows Kinect. Agreed additive PMF1: optional depth-registered RGB, camera-space XYZ float32 triples (zero sentinel), optional normalized SDK floor plane; old packets unchanged. Helper owns SDK mapping/throttling/buffers/tests/docs. Canvas owns shared schema/codec, Gray decode, measured candidates/output/masks/UI and canonical surface.fill. Root editor active, so synchronization deferred. No runtime restart or Git mutation until publication is agreed. Canvas is now also investigating its user's RTAB-Map0.23.8 request; preserve its active files.
 
