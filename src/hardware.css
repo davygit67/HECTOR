@@ -9,3 +9,4 @@
 .room-scan-view { height: 320px; width: 100%; background: #101b17; border-radius: 12px; overflow: hidden; }
 .room-scan-view canvas { display: block; max-width: 100%; }
 .room-scan-panel input[type=file] { display: block; max-width: 260px; margin-top: 8px; }
+.object-mapping-card{margin:22px 0}.object-mapping-columns{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(240px,1fr);gap:24px;margin-top:20px}.object-picker canvas{display:block;width:100%;background:#101a17;cursor:crosshair;border-radius:8px}.object-picker>div{min-height:180px;background:#14201b;color:#b5c6af;display:grid;place-items:center;border-radius:8px}.object-mapping-card input[type=color]{height:40px;padding:3px;max-width:100px}@media(max-width:800px){.object-mapping-columns{grid-template-columns:1fr}}

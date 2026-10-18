@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { CanvasRpc } from '../src/shared/chat.js';
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
+export function canvasRequestTimeout(operation:WithoutId<CanvasRpc>,ordinaryMs:number){
+  return operation.operation==='studio.execute'&&operation.request.type==='hardware.action'&&operation.request.command.action==='calibrate-projector'?85000:ordinaryMs;
+}
 
 /** One broker per studio connection. Receipts are never replayed after a lost connection. */
 export function createCanvasRpc(send: (request: CanvasRpc) => void, timeoutMs = 10000, onFault: () => void = () => {}) {
@@ -11,7 +14,7 @@ export function createCanvasRpc(send: (request: CanvasRpc) => void, timeoutMs = 
       if (closed) return Promise.reject(new Error('Studio disconnected.'));
       return new Promise((resolve, reject) => {
         const id = randomUUID();
-        const timer = setTimeout(() => { pending.delete(id); onFault(); reject(new Error('Studio did not acknowledge the request. Its changes may already be applied.')); }, timeoutMs);
+        const timer = setTimeout(() => { pending.delete(id); onFault(); reject(new Error('Studio did not acknowledge the request. Its changes may already be applied.')); }, canvasRequestTimeout(operation,timeoutMs));
         pending.set(id, { resolve: value => resolve(value as T), reject, timer });
         try { send({ ...operation, id }); } catch { clearTimeout(timer); pending.delete(id); onFault(); reject(new Error('Studio disconnected.')); }
       });

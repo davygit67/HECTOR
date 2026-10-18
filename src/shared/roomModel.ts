@@ -93,24 +93,31 @@ export function validateRoomReference(r: RoomReference) {
     !w || ![w.width, w.height, w.step].every(n => Number.isInteger(n) && n > 0 && n <= 8192) || !Array.isArray(w.meters) || w.meters.length > 12000 ||
     w.meters.length !== Math.ceil(w.width * w.height / w.step) || w.meters.some(n => !Number.isFinite(n) || n < 0 || n > 8) || w.meters.filter(Boolean).length !== r.positions.length / 3) throw new Error('Invalid metric room frame. Capture the room again.');
 }
-export function roomMatchesFrame(r: RoomReference, f: SensorFrame): boolean {
+export function roomMatchesFrame(r: RoomReference, f: SensorFrame, exclude?: {x:number;y:number;w:number;h:number}): boolean {
   if (JSON.stringify(f.device) !== r.descriptor || !f.cameraPoints) return false;
+  if (exclude && (![exclude.x,exclude.y,exclude.w,exclude.h].every(Number.isFinite) || exclude.w*exclude.h>.2 || exclude.w<=0 || exclude.h<=0 || exclude.x<0 || exclude.y<0 || exclude.x+exclude.w>1.00001 || exclude.y+exclude.h>1.00001)) return false;
   let count = 0, changed = 0, point = 0;
+  const quadrants = [0,0,0,0];
   for (let i = 0; i < r.witness.meters.length; i++) {
     const z = r.witness.meters[i]; if (!z) continue;
+    const px=(i*r.witness.step)%r.witness.width/r.witness.width, py=Math.floor(i*r.witness.step/r.witness.width)/r.witness.height;
+    if (exclude && px>=exclude.x && px<=exclude.x+exclude.w && py>=exclude.y && py<=exclude.y+exclude.h) { point+=3; continue; }
     const now = f.depth[i * r.witness.step] * f.device.depthScaleMeters; count++;
     const index = i * r.witness.step * 3;
     const measured = cameraToRoom([f.cameraPoints[index], f.cameraPoints[index + 1], f.cameraPoints[index + 2]], r.transform);
     if (!now || Math.abs(now - z) > .025 || Math.hypot(...measured.map((n, a) => n - r.positions[point + a])) > .035) changed++;
+    else quadrants[(px>=.5?1:0)+(py>=.5?2:0)]++;
     point += 3;
   }
-  return count >= 300 && changed / count <= .035;
+  return count >= 300 && changed / count <= .035 && (!exclude || quadrants.filter(n=>n>=40).length>=3);
 }
 export class RoomContinuity {
   reference: RoomReference | null = null;
+  /** Fixed, explicitly selected work area; never follows motion to hide a moving rig. */
+  trackingRegion: {x:number;y:number;w:number;h:number} | undefined;
   private matches = 0; private lastAt = 0; private lastCapture = -1; private generation = -1;
   private mismatch: 'moved' | 'different-sensor' | null = null;
-  setReference(r: RoomReference | null) { if (r) validateRoomReference(r); this.reference = r; this.matches = 0; this.lastAt = 0; this.lastCapture = -1; this.generation = -1; this.mismatch = r?.invalidated ?? null; }
+  setReference(r: RoomReference | null) { if (r) validateRoomReference(r); this.reference = r; this.trackingRegion=undefined; this.matches = 0; this.lastAt = 0; this.lastCapture = -1; this.generation = -1; this.mismatch = r?.invalidated ?? null; }
   disconnected() { this.matches = 0; this.lastAt = 0; this.lastCapture = -1; }
   observe(f: SensorFrame, now: number, generation: number) {
     const r = this.reference; if (!r) return;
@@ -119,7 +126,7 @@ export class RoomContinuity {
     if (this.lastAt && now - this.lastAt < 150) return;
     this.lastCapture = f.capturedAtMs; this.lastAt = now;
     if (JSON.stringify(f.device) !== r.descriptor) { this.mismatch = 'different-sensor'; this.matches = 0; }
-    else if (!roomMatchesFrame(r, f)) { this.mismatch = 'moved'; this.matches = 0; }
+    else if (!roomMatchesFrame(r, f, this.trackingRegion)) { this.mismatch = 'moved'; this.matches = 0; }
     else this.matches++;
   }
   status(now = Date.now()): RoomModelStatus {

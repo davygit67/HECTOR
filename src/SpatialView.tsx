@@ -1,4 +1,5 @@
 import { getRoomReference, loadRoomReference, roomReferenceRevision } from './roomModelStore';
+import {getObjectPreview,objectPreviewRevision} from './objectRuntime';
 import { programRevision } from './programRuntime';
 import { measuredMaskPath } from './shared/measured';
 import { layerOpacity, layerVisible, renderWidth, surfaceLayers } from './shared/layers';
@@ -151,7 +152,8 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
     const controls = view === 'orbit' ? new OrbitControls(camera, renderer.domElement) : null;
     if (controls) { controls.target.set(0, 1, -.3); controls.enableDamping = true; controls.minDistance = 2; controls.maxDistance = 11; controls.maxPolarAngle = Math.PI * .49; controls.listenToKeyEvents(renderer.domElement); controls.saveState(); }
     void loadRoomReference().catch(() => {});
-    let lastRoomRevision = -1, framedRoomId = '';
+    let lastRoomRevision = -1, framedRoomId = '',lastObjectRevision=-1,lastObjectRegion='';
+    const objectGeometry=new THREE.BufferGeometry(),objectMaterial=new THREE.PointsMaterial({size:.012,color:'#b8ef9a'}),objectCloud=new THREE.Points(objectGeometry,objectMaterial);
     const geometries: THREE.BufferGeometry[] = [], materials: THREE.Material[] = [], sprites: THREE.Texture[] = [];
     let meshes: { id: string; mesh: THREE.Mesh; material: THREE.ShaderMaterial }[] = [], lastGeometry = -1, lastSelection = '', lastViewer = '', frame = 0;
     const collect = <T extends THREE.BufferGeometry | THREE.Material>(value: T): T => { if (value instanceof THREE.BufferGeometry) geometries.push(value); else materials.push(value); return value; };
@@ -173,10 +175,15 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
       const state = current.current.scene, isOutput = view.startsWith('projector');
       const room = view === 'orbit' ? getRoomReference() : null;
       lastRoomRevision = roomReferenceRevision();
+      lastObjectRegion=JSON.stringify(getObjectPreview()?.region??null);
       if (room) {
         const geometry = collect(new THREE.BufferGeometry());
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(room.positions, 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(room.colors.map(n => n / 255), 3));
+        const target=getObjectPreview(),region=target?.roomReferenceId===room.id?target.region:undefined;
+        const positions:number[]=[],colors:number[]=[];let point=0;
+        for(let i=0;i<room.witness.meters.length;i++){if(!room.witness.meters[i])continue;const pixel=i*room.witness.step,x=pixel%room.witness.width/room.witness.width,y=Math.floor(pixel/room.witness.width)/room.witness.height;
+          if(!region||x<region.x||x>region.x+region.w||y<region.y||y>region.y+region.h){positions.push(...room.positions.slice(point,point+3));colors.push(...room.colors.slice(point,point+3).map(n=>n/255));}point+=3;}
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         world.add(new THREE.Points(geometry, collect(new THREE.PointsMaterial({ size: .018, vertexColors: true }))));
         if (controls && framedRoomId !== room.id) {
           geometry.computeBoundingBox(); const box = geometry.boundingBox!, center = box.getCenter(new THREE.Vector3()), span = Math.max(1, box.getSize(new THREE.Vector3()).length());
@@ -239,13 +246,18 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
       if (!visible || !renderVisible(element) || time - lastRender < interval) { frame = requestAnimationFrame(render); return; }
       lastRender = time;
       const state = current.current.scene;
-      if (lastRoomRevision !== roomReferenceRevision() || lastGeometry !== state.geometryRevision || lastSelection !== state.selectedSurfaceId || lastViewer !== JSON.stringify(state.viewer.position)) rebuild();
+      if (lastRoomRevision !== roomReferenceRevision() || lastObjectRegion!==JSON.stringify(getObjectPreview()?.region??null) || lastGeometry !== state.geometryRevision || lastSelection !== state.selectedSurfaceId || lastViewer !== JSON.stringify(state.viewer.position)) rebuild();
       if (view !== 'orbit') {
         const pose: CameraPose = view === 'viewer' ? state.viewer : state.projectors.find(p => p.id === view)!;
         camera.position.set(...pose.position); camera.lookAt(...pose.target); camera.fov = pose.fov; camera.aspect = pose.aspect; camera.updateProjectionMatrix();
       }
       const mode = view === 'projector-a' ? 2 : view === 'projector-b' ? 3 : current.current.coverage ? 1 : 0;
       const now = Date.now();
+      if(view==='orbit'){
+        const object=getObjectPreview();objectCloud.visible=!!object&&object.roomReferenceId===getRoomReference()?.id&&now-object.at<500;
+        if(lastObjectRevision!==objectPreviewRevision()){lastObjectRevision=objectPreviewRevision();objectGeometry.setAttribute('position',new THREE.Float32BufferAttribute(object?.positions??[],3));objectGeometry.computeBoundingSphere();objectMaterial.color.set(object?.color??'#b8ef9a');}
+        if(objectCloud.parent!==world)world.add(objectCloud);
+      }
       for (const entry of meshes) {
         const surface = state.surfaces.find(s => s.id === entry.id)!;
         entry.material.uniforms.art.value = getArtwork(state, surface, now, true, false, renderWidth(state, view !== 'orbit' && view !== 'viewer')).texture;
@@ -256,7 +268,7 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
     return () => {
       cancelAnimationFrame(frame); observer.disconnect(); visibility.disconnect(); controls?.dispose();
       renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up);
-      geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); sprites.forEach(t => t.dispose()); renderer.dispose(); renderer.domElement.remove();
+      objectGeometry.dispose();objectMaterial.dispose();geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); sprites.forEach(t => t.dispose()); renderer.dispose(); renderer.domElement.remove();
     };
   }, [view, resetKey]);
   return <div className="spatial-render" style={{ filter: `brightness(${scene.display?.brightness ?? 1})` }} ref={host} data-view={view}>{error && <div className="webgl-error" role="alert">{error}</div>}</div>;

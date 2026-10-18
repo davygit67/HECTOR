@@ -28,3 +28,5 @@
 .projection-grid-toggle input{accent-color:#a3d2b2;width:16px;height:16px}
 
 .projection-controls[hidden]{display:none}
+
+.object-projection-output{position:absolute;inset:0;width:100%;height:100%;background:#000;z-index:15;pointer-events:none}.object-projection-output[hidden]{display:none!important}

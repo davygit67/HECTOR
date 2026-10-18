@@ -7,6 +7,14 @@ export interface PatternOutputStatus {
   outputId: string; visible: boolean; width: number; height: number; devicePixelRatio: number; atMs: number;
   activeOwner: string | null; patternId: string | null; fullscreen?: boolean;
 }
+/** Never calibrate a small preview merely because it announced itself first. */
+export function choosePatternOutput(outputs:PatternOutputStatus[],requireFullscreen=false,nativeFullscreen=false) {
+  const visible=outputs.filter(o=>o.visible&&Date.now()-o.atMs<3000),full=visible.filter(o=>o.fullscreen);
+  if(full.length===1)return full[0];
+  if(full.length>1)throw new Error('Keep only the intended projector output full screen before calibration.');
+  if(visible.length===1&&(!requireFullscreen||nativeFullscreen))return visible[0];
+  throw new Error(requireFullscreen?'Open the intended projector output and make it full screen.':'Keep one projection output visible, or make the intended output full screen.');
+}
 export class PatternOutputClient {
   readonly ownerId = crypto.randomUUID();
   readonly outputs = new Map<string, PatternOutputStatus>();

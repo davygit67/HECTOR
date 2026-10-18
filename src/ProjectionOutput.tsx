@@ -108,7 +108,7 @@ export const ProjectionOutput = forwardRef<ProjectionOutputHandle, {
       if (event.key.toLowerCase() === 'a' && manual && send) { event.preventDefault(); changeMode('align'); }
       if (event.key.toLowerCase() === 'p') { event.preventDefault(); changeMode('project'); }
     }}>
-    {active && <PatternOutput><main className="output-screen" inert={!editing}><div className="output-fit">
+    {active && <PatternOutput blackout={scene.display?.blackout} brightness={scene.display?.brightness}><main className="output-screen" inert={!editing}><div className="output-fit">
       {manual ? <Stage scene={renderScene} now={now} mode="align" clean alignmentEditing={editing} send={send} alignmentSession={alignmentSession} /> : <div style={{ width: '100%', height: '100%', visibility: scene.display?.blackout ? 'hidden' : undefined }}><SpatialView scene={renderScene} view={scene.outputView as 'projector-a' | 'projector-b'} presenting /></div>}
     </div></main></PatternOutput>}
     <div className="projection-controls" aria-label="Projection controls" hidden={!shown} inert={!shown}>

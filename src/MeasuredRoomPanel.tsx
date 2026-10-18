@@ -19,6 +19,6 @@ export function MeasuredRoomPanel({ result, state, message, busy, canMap, canSol
         <div className="hardware-actions"><button className="secondary" disabled={busy} onClick={() => useSurface(candidate.id, 'table')}>{appliedId === candidate.id ? 'Reapply as table' : 'Use as table'}</button><button className="secondary" disabled={busy} onClick={() => useSurface(candidate.id, 'wall')}>Use as wall</button></div>
       </div>
     </article>)}</div>}
-    <div className="hardware-footnote">Once mapped, return to Studio and ask “Make the tabletop red.” Use Project full screen on the same display. Re-scan after moving either device or the surface, or changing projector keystone/zoom. This maps flat surfaces; curved objects and live object tracking are not supported yet.</div>
+    <div className="hardware-footnote">Once mapped, return to Studio and ask “Make the tabletop red.” Use Project full screen on the same display. Re-scan after moving either device or the surface, or changing projector keystone/zoom. This maps flat surfaces. For one curved object and slow movement, continue with Follow one object below.</div>
   </section>;
 }

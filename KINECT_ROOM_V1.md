@@ -63,3 +63,7 @@ Automated checks cover analytic metric geometry, noisy/missing rays, movement, s
 Still requires Windows hardware qualification: sustained USB acquisition, native driver restart, projector pattern latency/contrast, floor estimate reliability and measured footprint error. Start with a matte, clear tabletop. If USB repeatedly cuts out, investigate power, adapter/cable/controller and host load; retaining a reference cannot manufacture missing observations.
 
 Next milestones: general projector intrinsics/extrinsics using multiple depths, per-surface local change masks, object-instance segmentation and curved geometry, sensor-driven interaction, camera-motion registration/TSDF fusion, and multiple-rig timing/brightness/blending. No claim of arbitrary-object or whole-room autonomous understanding is made by this slice.
+
+## Curved-object extension
+
+The experimental [curved-object and slow-movement workflow](CURVED_OBJECTS_V1.md) now builds on this fixed-room reference. It adds full 3D projector fitting, explicit object selection and live solid-color masks. The planar workflow above remains unchanged; semantic recognition, hidden faces and fast tracking remain future work.

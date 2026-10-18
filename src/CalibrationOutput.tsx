@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PATTERN_CHANNEL, paintPattern } from './patternOutput';
 import { validatePattern, type CalibrationPattern } from './shared/calibrationPatterns';
+import { ObjectProjection } from './ObjectProjection';
 
 /** A temporary raw-raster override. The scene remains mounted underneath and is never edited. */
-export function PatternOutput({ children }: { children: ReactNode }) {
+export function PatternOutput({ children,blackout,brightness }: { children: ReactNode;blackout?:boolean;brightness?:number }) {
   const canvas = useRef<HTMLCanvasElement>(null), [pattern, setPattern] = useState<CalibrationPattern | null>(null);
+  const id=useRef(crypto.randomUUID());
   useEffect(() => {
-    const outputId = crypto.randomUUID(), channel = new BroadcastChannel(PATTERN_CHANNEL);
+    const outputId = id.current, channel = new BroadcastChannel(PATTERN_CHANNEL);
     let ownerId: string | null = null, patternId: string | null = null, leaseUntil = 0, generation = 0, disposed = false;
     const metrics = () => ({ width: innerWidth, height: innerHeight, devicePixelRatio });
     const status = () => { if (!disposed) channel.postMessage({ type: 'status', outputId, visible: document.visibilityState === 'visible', activeOwner: ownerId, patternId, fullscreen: !!document.fullscreenElement, ...metrics() }); };
@@ -44,5 +46,5 @@ export function PatternOutput({ children }: { children: ReactNode }) {
     status();
     return () => { disposed = true; generation++; clearInterval(timer); channel.close(); window.removeEventListener('resize', geometryChanged); document.removeEventListener('visibilitychange', geometryChanged); window.removeEventListener('keydown', escape); };
   }, []);
-  return <>{children}<div className="calibration-output" hidden={!pattern}><canvas ref={canvas} aria-label="Calibration pattern output" style={pattern ? { width: `min(100vw, ${100 * pattern.width / pattern.height}vh)`, height: `min(100vh, ${100 * pattern.height / pattern.width}vw)` } : undefined} /></div></>;
+  return <>{children}<ObjectProjection outputId={id.current} blackout={blackout} brightness={brightness}/><div className="calibration-output" hidden={!pattern}><canvas ref={canvas} aria-label="Calibration pattern output" style={pattern ? { width: `min(100vw, ${100 * pattern.width / pattern.height}vh)`, height: `min(100vh, ${100 * pattern.height / pattern.width}vw)` } : undefined} /></div></>;
 }

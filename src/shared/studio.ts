@@ -1,5 +1,6 @@
 import type { ProgramOperation, ProgramRuntimeStatus } from './program.js';
 import type { RoomModelStatus } from './roomModel.js';
+import type { ObjectMappingStatus } from './objectMapping.js';
 import type { Command } from './domain.js';
 import type { Snapshot, OutputCommand } from './bridge.js';
 import type { MediaCommand, MediaState } from './media.js';
@@ -8,6 +9,8 @@ export type StudioView = 'room' | 'arrange' | 'align';
 export type StudioInspector = 'assistant' | 'surface' | 'content' | 'projectors' | 'viewer';
 export interface StudioUI { page: 'studio' | 'hardware'; view: StudioView; inspector: StudioInspector; fullscreen: boolean; coverage?: boolean; previews?: boolean; interact?: boolean }
 export type HardwareAction =
+  | { action: 'calibrate-projector' | 'stop-object' }
+  | { action: 'fill-object'; objectId: string; color: string | null }
   | { action: 'connect-demo' | 'connect-live' | 'disconnect' | 'stop-recording' | 'pause-replay' | 'play-replay' | 'capture' | 'map-table' | 'solve-surfaces' | 'cancel-capture' | 'clear-pattern' | 'scan-room' | 'forget-room' }
   | { action: 'use-surface'; candidateId: string; kind: 'table' | 'wall' }
   | { action: 'record'; seconds?: number }
@@ -23,6 +26,7 @@ export interface HardwareStatus {
   sessions: { id: string; name: string; provenance: string; frames: number }[];
   geometrySolved: boolean; sensorId?: string; validSurfaceIds?: string[];
   roomModel?: RoomModelStatus;
+  objectMapping?: ObjectMappingStatus;
   mapping?: { state: string; message: string; candidates: { id: string; label: string; kind: 'table' | 'wall' | 'unknown'; width: number; height: number; rmsPx: number }[]; selectedId?: string };
   settings?: Extract<HardwareAction, { action: 'configure' }>['settings'];
 }

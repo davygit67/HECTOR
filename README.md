@@ -195,3 +195,5 @@ Room-wide light uses one viewer-relative extension of the source video plane, sa
 Live Scene568/Geometry5 was verified with the user's new UDTmUzu05BE video, fish removed, ripple disabled and existing tabletop timer retained. Room fill100%,opacity1,vibrance1.4 were applied through visible controls;Cinema/intensity1/spread.18/smoothing180 and20%left/16%top/1152×713 placement were preserved. Actual3D view shows matching video-derived colors over both surfaces with the timer clear; playback advanced muted to42s. This verifies software output, not physical projector brightness or protected-stream compatibility.
 
 For the fixed Kinect/projector workflow, see [Kinect room integration v1](KINECT_ROOM_V1.md): stable metric room capture, reconnect verification and calibrated table/wall targeting in the existing Studio.
+
+Curved objects and slow tabletop movement are available as an experimental workflow in **Hardware setup → Follow one object**. See [CURVED_OBJECTS_V1.md](CURVED_OBJECTS_V1.md) for calibration, selection, agent commands and hardware qualification limits.
