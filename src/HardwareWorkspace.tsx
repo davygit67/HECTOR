@@ -1,3 +1,7 @@
+import { RoomReferencePanel } from './RoomReferencePanel';
+import { RoomContinuity, type RoomModelStatus } from './shared/roomModel';
+import { getRoomReference, invalidateRoomReference, loadRoomReference, saveRoomReference, subscribeRoomReference } from './roomModelStore';
+import { captureRoomReference } from './captureRoom';
 import { RoomScanPanel } from './RoomScanPanel';
 import { measurementMatchesFrame } from './shared/measured';
 import { MeasuredRoomPanel } from './MeasuredRoomPanel';
@@ -9,7 +13,7 @@ import { patternLabel, patternSequence, type CalibrationPattern } from './shared
 import { capturePatterns, type CaptureProgress } from './shared/calibrationCapture';
 import { canAppendFrame, copyFrame, decodeSensorSession, SENSOR_LIMITS, sessionBytes, type SensorFrame, type SensorSession } from './shared/sensor';
 import { delay, SensorInbox } from './shared/sensorStream';
-import { demoSensor, localSensor, type LocalSensorMode, type SensorSource } from './sensorSources';
+import { demoSensor, recoveringSensor, type LocalSensorMode, type SensorSource } from './sensorSources';
 import { PatternOutputClient, paintPattern } from './patternOutput';
 import { deleteSensorSession, downloadSensorSession, listSensorSessions, loadSensorSession, saveSensorSession, type SessionSummary } from './sensorSessions';
 import './hardware.css';
@@ -23,6 +27,10 @@ function sessionName(prefix: string) { return `${prefix} ${new Date().toLocaleSt
 
 export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const inbox = useMemo(() => new SensorInbox(), []);
+  const continuity = useMemo(() => new RoomContinuity(), []);
+  const [collectingRoom, setCollectingRoom] = useState(false), [roomFrames, setRoomFrames] = useState(0);
+  const [roomLoaded, setRoomLoaded] = useState(false);
+  const invalidatingRoom = useRef<string | null>(null);
   const source = useRef<SensorSource | null>(null), activePattern = useRef<CalibrationPattern | null>(null), output = useRef<PatternOutputClient | null>(null);
   const controller = useRef<AbortController | null>(null), recording = useRef<Recording | null>(null), mounted = useRef(false);
   const finishRef = useRef<(message?: string) => void>(() => {});
@@ -45,7 +53,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const [error, setError] = useState('');
   const previewAt = useRef(0);
   const importInput = useRef<HTMLInputElement>(null);
-  const busy = capturing || isRecording || saving || presentingManual || loadingSession || solving;
+  const busy = collectingRoom || capturing || isRecording || saving || presentingManual || loadingSession || solving;
   const [width, height] = resolution.split('x').map(Number), patterns = useMemo(() => patternSequence(width, height, sequenceKind), [width, height, sequenceKind]);
   const outputs = [...(output.current?.outputs.values() ?? [])];
   const frame = sourceMode === 'replay' ? selected?.frames[replayIndex] ?? null : liveFrame;
@@ -72,9 +80,17 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   finishRef.current = finishRecording;
   useEffect(() => {
     mounted.current = true;
+    const unsubscribeRoom = subscribeRoomReference(() => { continuity.setReference(getRoomReference()); setRoomLoaded(true); });
+    void loadRoomReference().then(r => { if (mounted.current) { continuity.setReference(r); setRoomLoaded(true); } }).catch(e => { if (mounted.current) { setError(describeError(e)); setRoomLoaded(true); } });
     output.current = new PatternOutputClient(() => refreshOutputs(n => n + 1));
     void listSensorSessions().then(value => { if (mounted.current) setSessions(value); }).catch(e => { if (mounted.current) setStorageNote(describeError(e)); });
     const unsubscribe = inbox.subscribe(({ frame: next, receivedAtMs }) => {
+      if (next.device.kind !== 'synthetic') continuity.observe(next, receivedAtMs, inbox.generation);
+      const state = continuity.status(receivedAtMs).state, reference = continuity.reference;
+      if (reference && !reference.invalidated && invalidatingRoom.current !== reference.id && (state === 'moved' || state === 'different-sensor')) {
+        invalidatingRoom.current = reference.id;
+        void invalidateRoomReference(reference.id, state).catch(e => { if (mounted.current) setError(describeError(e)); });
+      }
       if (receivedAtMs - previewAt.current >= 90) { previewAt.current = receivedAtMs; setLiveFrame(next); setReceivedAt(receivedAtMs); }
       const current = recording.current;
       if (current && receivedAtMs >= current.nextAt && next.sequence !== current.lastSequence) {
@@ -92,7 +108,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     window.addEventListener('beforeunload', warn);
     return () => {
       mounted.current = false; controller.current?.abort(); solveJob.current?.cancel(); source.current?.stop(); source.current = null; recording.current = null;
-      output.current?.dispose(); output.current = null; clearInterval(timer); unsubscribe(); window.removeEventListener('beforeunload', warn);
+      output.current?.dispose(); output.current = null; clearInterval(timer); unsubscribe(); unsubscribeRoom(); window.removeEventListener('beforeunload', warn);
     };
   }, [inbox]);
   useEffect(() => {
@@ -104,7 +120,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
 
   function clearPattern() { activePattern.current = null; setPattern(null); output.current?.clear(); }
   function disconnect() {
-    source.current?.stop(); source.current = null; inbox.reset(); clearPattern();
+    source.current?.stop(); source.current = null; inbox.reset(); continuity.disconnected(); clearPattern();
     setLiveFrame(null); setBridgeMode(null); setConnection('disconnected'); setConnectionMessage('Source disconnected.');
   }
   function changeSource(mode: SourceMode) { disconnect(); setReplayPlaying(false); setSourceMode(mode); setError(''); if (mode === 'live') setOutputTarget('output'); }
@@ -113,9 +129,9 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     if (mode === 'demo') {
       source.current = demoSensor(inbox, () => activePattern.current); setConnection('connected'); setConnectionMessage('Generated RGB and depth · no physical sensor');
     } else if (mode === 'live') {
-      try { source.current = localSensor(inbox, address, (status, message, mode) => {
+      try { source.current = recoveringSensor(inbox, address, (status, message, mode) => {
         setConnection(status); setConnectionMessage(message); setBridgeMode(mode);
-        if (status !== 'connected') { setLiveFrame(null); setReceivedAt(0); if (recording.current) finishRef.current(message || 'Sensor connection changed. Partial recording retained.'); }
+        if (status !== 'connected') { continuity.disconnected(); setLiveFrame(null); setReceivedAt(0); if (recording.current) finishRef.current(message || 'Sensor connection changed. Partial recording retained.'); }
         if (status === 'error') setError(message);
       }); }
       catch (e) { setConnection('error'); setConnectionMessage(describeError(e)); }
@@ -138,8 +154,32 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     if (!target || !output.current) throw new Error('Open the projection output, move it to your projector, and keep it visible.');
     return output.current.present(next, target.outputId, signal);
   }
+  async function scanRoom() {
+    if (busy || operationActive.current || !roomLoaded) throw new Error('Finish the active operation before capturing the room.');
+    if (!canAcquire || sourceMode !== 'live' || bridgeMode !== 'live') throw new Error('Connect the live Kinect to capture a physical room.');
+    operationActive.current = true; setCollectingRoom(true); setRoomFrames(0); setError(''); clearPattern();
+    const abort = new AbortController(); controller.current = abort;
+    try {
+      const reference = await captureRoomReference(inbox, abort.signal, setRoomFrames);
+      if (!mounted.current || abort.signal.aborted) throw new Error('Room capture cancelled.');
+      await saveRoomReference(reference); continuity.setReference(reference);
+      setRoomSolve(null); solvedSession.current = null; setAppliedCandidate(undefined); setMappingState('idle');
+      setMappingMessage('Room reference saved. Wait for live verification, then scan projector patterns to align a surface.');
+      return 'Measured room reference saved. Returning frames must verify it before projector calibration; no surface was mapped by this capture.';
+    } finally { operationActive.current = false; controller.current = null; if (mounted.current) setCollectingRoom(false); }
+  }
+  async function forgetRoom() {
+    if (busy || operationActive.current) throw new Error('Finish the active operation first.');
+    operationActive.current = true; setSaving(true);
+    try {
+      await saveRoomReference(null); continuity.setReference(null); setRoomSolve(null); solvedSession.current = null;
+      setMappingMessage('Room reference removed. Existing content remains; capture a new room and calibrate for automatic mapping.');
+      return 'Room reference removed. Existing content and saved surfaces remain; automatic physical actions need a new capture and calibration.';
+    } finally { operationActive.current = false; if (mounted.current) setSaving(false); }
+  }
   function checkMappingReady() {
     if (!canAcquire || sourceMode !== 'live' || bridgeMode !== 'live' || !inbox.latest || Date.now() - inbox.latest.receivedAtMs > 2000) throw new Error('Connect a fresh live Kinect before mapping the physical table.');
+    if (!continuity.status().canMap) throw new Error(continuity.status().message);
     if (inbox.latest.frame.device.colorRegistration !== 'depth' || !inbox.latest.frame.cameraPoints) throw new Error('Update and restart the Kinect helper to supply registered color and camera points.');
     if (outputTarget !== 'output' || ![...(output.current?.outputs.values() ?? [])].some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen))) throw new Error('Open the output on the projector and press Full screen there before mapping.');
   }
@@ -148,6 +188,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     if (session.provenance === 'sensor') {
       checkMappingReady();
       const measurement = candidate.surface.measurement!, live = inbox.latest!.frame;
+      if (measurement.roomReferenceId !== continuity.reference?.id) throw new Error('This calibration belongs to an older room reference. Scan the projector patterns again.');
       if (!measurementMatchesFrame(measurement, live)) throw new Error('The sensor view changed since capture. Keep the rig fixed and scan again.');
       const presentation = session.captures[0].presentation, currentOutput = output.current?.outputs.get(presentation.outputId);
       if (!currentOutput || !currentOutput.visible || currentOutput.width !== measurement.viewport.width || currentOutput.height !== measurement.viewport.height || currentOutput.devicePixelRatio !== measurement.viewport.devicePixelRatio) throw new Error('Use the same unchanged full-screen output as the capture, or scan again.');
@@ -169,7 +210,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         solveJob.current = { cancel: () => { finish(); reject(new Error('Surface solve cancelled.')); } };
         worker.onmessage = ({ data }) => { finish(); if (data.error) reject(new Error(data.error)); else resolve(data.result); };
         worker.onerror = () => { finish(); reject(new Error('Surface solver could not run. Reload Studio and retry.')); };
-        worker.postMessage(session);
+        worker.postMessage({ session, room: session.provenance === 'sensor' ? continuity.reference ?? undefined : undefined });
       });
       if (!mounted.current) return;
       solvedSession.current = session; setRoomSolve(result); setMappingState('review'); setMappingMessage(result.message);
@@ -230,14 +271,17 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     finally { sessionOperation.current = false; if (mounted.current) setLoadingSession(false); }
   }
   const actualOutput = outputs.find(item => item.visible);
-  const validSurfaceIds = canAcquire && sourceMode === 'live' && bridgeMode === 'live' && inbox.latest && clock - inbox.latest.receivedAtMs < 2000
-    ? snapshot.scene.surfaces.filter(s => s.measurement?.source === 'sensor' && measurementMatchesFrame(s.measurement, inbox.latest!.frame) && outputs.some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen) && o.width === s.measurement!.viewport.width && o.height === s.measurement!.viewport.height && o.devicePixelRatio === s.measurement!.viewport.devicePixelRatio)).map(s => s.id) : [];
+  const roomStatus: RoomModelStatus = collectingRoom ? { ...continuity.status(clock), state: 'collecting', message: `Collecting stable room observations · ${roomFrames} / 12`, frames: roomFrames, canMap: false } : continuity.status(clock);
+  function currentValidSurfaceIds() {
+    return !operationActive.current && !busy && continuity.status().canMap && canAcquire && sourceMode === 'live' && bridgeMode === 'live' && inbox.latest && Date.now() - inbox.latest.receivedAtMs < 2000
+    ? snapshot.scene.surfaces.filter(s => s.measurement?.source === 'sensor' && s.measurement.roomReferenceId === continuity.reference?.id && measurementMatchesFrame(s.measurement, inbox.latest!.frame) && outputs.some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen) && o.width === s.measurement!.viewport.width && o.height === s.measurement!.viewport.height && o.devicePixelRatio === s.measurement!.viewport.devicePixelRatio)).map(s => s.id) : [];
+  }
   useEffect(() => registerHardware({
     status: () => ({ initialized: true, mode: sourceMode, connection, message: error || connectionMessage,
       provenance: sourceMode === 'demo' || bridgeMode === 'demo' ? 'synthetic' : sourceMode === 'replay' || bridgeMode === 'replay' ? 'replay' : bridgeMode === 'live' ? 'sensor' : 'unknown',
       busy, canAcquire, frames: recordCount, recording: isRecording, capturing,
       sessions: sessions.map(({ id, name, provenance, frames }) => ({ id, name, provenance, frames })), geometrySolved: snapshot.scene.surfaces.some(s => s.provenance === 'measured'),
-      sensorId: liveFrame?.device.id, validSurfaceIds,
+      sensorId: inbox.latest?.frame.device.id, validSurfaceIds: currentValidSurfaceIds(), roomModel: { ...continuity.status(), ...(collectingRoom ? roomStatus : {}), canMap: continuity.status().canMap && !busy && !operationActive.current },
       mapping: { state: mappingState, message: mappingMessage, selectedId: appliedCandidate, candidates: roomSolve?.candidates.map(c => ({ id: c.id, label: c.label, kind: c.kind, width: c.surface.width, height: c.surface.height, rmsPx: c.rmsPx })) ?? [] },
       settings: { address, resolution: resolution as '1920x1080', sequence: sequenceKind, settleMs: settleMs as 300, outputTarget: outputTarget as 'demo' | 'output', replayRate: replayRate as 1, replayIndex } }),
     execute: async command => {
@@ -262,6 +306,8 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         case 'download-session': if (!selected) throw new Error('Open a recording first.'); downloadSensorSession(selected); return 'Recording download requested.';
         case 'remove-session': if (!sessions.some(s => s.id === command.id)) throw new Error('Recording not found.'); await deleteSensorSession(command.id); setSessions(await listSensorSessions()); if (selected?.id === command.id) { setSelected(null); setReplayPlaying(false); } return 'Recording deleted from this device.';
         case 'connect-demo': case 'connect-live': { const mode = command.action === 'connect-demo' ? 'demo' : 'live'; setSourceMode(mode); setReplayPlaying(false); if (mode === 'live') setOutputTarget('output'); connect(mode); return 'Sensor connection requested. Inspect readiness and provenance before capture.'; }
+        case 'scan-room': return await scanRoom();
+        case 'forget-room': return await forgetRoom();
         case 'disconnect': disconnect(); return 'Sensor disconnected.';
         case 'record': { const seconds = command.seconds ?? duration; if (!Number.isFinite(seconds) || seconds < 1 || seconds > 30) throw new Error('Choose a recording duration of 1–30 seconds.'); if (!canAcquire) throw new Error('A fresh live or in-app demo sensor is required.'); setDuration(seconds); startRecording(seconds); return 'Recording started.'; }
         case 'open-session': if (!sessions.some(s => s.id === command.id)) throw new Error('Recording not found.'); await openSession(command.id); return 'Recording load requested. Inspect replay status.';
@@ -298,10 +344,12 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         {selected && <div className="selected-session"><strong>{selected.name}</strong><p>{selected.frames.length} frames · {sizeLabel(sessionBytes(selected))}{selected.captures.length ? ` · ${selected.captures.length}/${selected.plannedPatterns.length} patterns` : ''}</p>{selected.message && <p>{selected.message}</p>}<div className="hardware-actions"><button className="secondary" disabled={busy} onClick={() => { changeSource('replay'); setReplayIndex(0); }}>Review</button><button className="secondary" disabled={saving} onClick={() => { try { downloadSensorSession(selected); } catch (e) { setError(describeError(e)); } }}>Download</button><button className="hardware-text-button" disabled={busy} onClick={async () => { try { await deleteSensorSession(selected.id); setSessions(await listSensorSessions()); setSelected(null); setReplayPlaying(false); } catch (e) { setError(describeError(e)); } }}>Delete</button></div></div>}
       </section>
     </div>
-    <MeasuredRoomPanel result={roomSolve} state={mappingState} message={mappingMessage} busy={busy} canMap={canAcquire && sourceMode === 'live' && bridgeMode === 'live'} canSolve={selected?.kind === 'pattern-capture' && selected.status === 'complete'} appliedId={appliedCandidate}
+    <RoomReferencePanel status={roomStatus} busy={busy} canScan={roomLoaded && canAcquire && sourceMode === 'live' && bridgeMode === 'live'} scan={() => void scanRoom().catch(e => setError(describeError(e)))} forget={() => void forgetRoom().catch(e => setError(describeError(e)))} />
+    {collectingRoom && <button className="secondary" onClick={() => controller.current?.abort()}>Cancel room capture</button>}
+    <MeasuredRoomPanel result={roomSolve} state={mappingState} message={mappingMessage} busy={busy} canMap={roomStatus.canMap && canAcquire && sourceMode === 'live' && bridgeMode === 'live'} canSolve={selected?.kind === 'pattern-capture' && selected.status === 'complete'} appliedId={appliedCandidate}
       map={() => void capture(true).catch(e => { setError(describeError(e)); setMappingMessage(describeError(e)); })} solve={() => selected && void solveCapture(selected)} useSurface={(id, kind) => void useCandidate(id, kind).catch(e => setError(describeError(e)))} />
     <RoomScanPanel />
-    <section className="hardware-card pattern-card"><div className="hardware-card-title"><div><span className="eyebrow">02 / PATTERN CAPTURE</span><h3>Connect pixels to observations</h3></div><span className="hardware-badge">Capture only · no geometry changes</span></div>
+    <section className="hardware-card pattern-card"><div className="hardware-card-title"><div><span className="eyebrow">ADVANCED / PATTERN CAPTURE</span><h3>Connect pixels to observations</h3></div><span className="hardware-badge">Capture only · no geometry changes</span></div>
       <div className="pattern-columns"><div><PatternPreview pattern={shownPattern} /><p className="hardware-caption">{shownPattern ? patternLabel(shownPattern) : 'Choose a test pattern or start a sequence.'}</p>{replayCapture && <p className="hardware-caption">Captured after {replayCapture.settleMs} ms settling · {replayCapture.presentation.mode === 'synthetic' ? 'Virtual projector' : 'Output window'} · source clock ±{frame?.clockUncertaintyMs} ms</p>}</div>
         <div className="pattern-settings"><div className="hardware-controls"><label className="field"><span>Output</span><select aria-label="Pattern output target" value={outputTarget} disabled={busy || sourceMode === 'replay'} onChange={e => { clearPattern(); setOutputTarget(e.target.value); }}><option value="demo" disabled={sourceMode !== 'demo'}>In-app demo projector</option><option value="output">Projection output window</option></select></label><button className="secondary" disabled={busy} onClick={() => { void bridge.output({ action: 'open' }).catch(e => setError(describeError(e))); setOutputTarget('output'); }}>Open output ↗</button></div>
           {outputTarget === 'output' && <><p className="hardware-caption">{actualOutput ? `Output visible · ${actualOutput.width} × ${actualOutput.height} window pixels · ${actualOutput.devicePixelRatio}× display scale` : 'Waiting for a visible output window.'} Move it to the projector and make it full screen before capture.</p>{snapshot.storage === 'disk' && <div className="hardware-controls"><label className="field"><span>Display</span><select aria-label="Calibration output display" disabled={busy} value={snapshot.output.displayId ?? snapshot.displays[0]?.id ?? ''} onChange={e => void bridge.output({ action: 'open', displayId: e.target.value }).catch(err => setError(describeError(err)))}>{snapshot.displays.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}</select></label><button className="secondary" disabled={busy} onClick={() => void bridge.output({ action: snapshot.output.fullscreen ? 'windowed' : 'fullscreen' }).catch(e => setError(describeError(e)))}>{snapshot.output.fullscreen ? 'Exit full screen' : 'Full screen'}</button></div>}</>}

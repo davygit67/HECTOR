@@ -17,22 +17,22 @@ export interface LocalSensorOptions {
   createSocket?: (url: string) => WebSocket;
   firstFrameTimeoutMs?: number; staleFrameMs?: number; heartbeatTimeoutMs?: number; healthIntervalMs?: number;
 }
-/** No silent retry: a new connection is an explicit new acquisition boundary. */
-export function localSensor(inbox: SensorInbox, address: string, onStatus: (status: LocalSensorState, message: string, mode: LocalSensorMode) => void, options: LocalSensorOptions = {}): SensorSource {
+/** A single acquisition boundary. The reconnect wrapper always resets it after transport loss. */
+export function localSensor(inbox: SensorInbox, address: string, onStatus: (status: LocalSensorState, message: string, mode: LocalSensorMode, recoverable?: boolean) => void, options: LocalSensorOptions = {}): SensorSource {
   const socket = (options.createSocket ?? (url => new WebSocket(url)))(localSensorURL(address)); socket.binaryType = 'arraybuffer';
   let stopped = false, connected = false, mode: LocalSensorMode | null = null, announced = false;
   let phase: SensorBridgeStatus['state'] = 'starting', phaseAt = Date.now(), lastTraffic = phaseAt, lastFrame = phaseAt;
   onStatus('connecting', 'Waiting for the local sensor helper…', 'live');
-  const end = (status: 'error' | 'ended', message: string) => {
-    if (stopped) return; stopped = true; clearInterval(health); socket.close(); inbox.reset(message); onStatus(status, message, mode ?? 'live');
+  const end = (status: 'error' | 'ended', message: string, recoverable = false) => {
+    if (stopped) return; stopped = true; clearInterval(health); socket.close(); inbox.reset(message); onStatus(status, message, mode ?? 'live', recoverable);
   };
-  const fail = (message: string) => end('error', message);
+  const fail = (message: string, recoverable = false) => end('error', message, recoverable);
   const invalidate = (message: string) => { connected = false; inbox.reset(message); };
   const health = setInterval(() => {
     const now = Date.now();
-    if (announced && now - lastTraffic > (options.heartbeatTimeoutMs ?? 15000)) fail('The sensor helper stopped responding. Restart the helper, then reconnect.');
-    else if (connected && mode !== 'replay' && now - lastFrame > (options.staleFrameMs ?? 5000)) fail('The sensor stopped sending frames. Check its power and USB connection, then reconnect.');
-    else if (!connected && phase !== 'waiting' && now - phaseAt > (options.firstFrameTimeoutMs ?? 6000)) fail('No sensor frames received. Start the Kinect helper on this computer, then reconnect.');
+    if (announced && now - lastTraffic > (options.heartbeatTimeoutMs ?? 15000)) fail('The sensor helper stopped responding. Restart the helper, then reconnect.', true);
+    else if (connected && mode !== 'replay' && now - lastFrame > (options.staleFrameMs ?? 5000)) fail('The sensor stopped sending frames. Check its power and USB connection, then reconnect.', true);
+    else if (!connected && phase !== 'waiting' && now - phaseAt > (options.firstFrameTimeoutMs ?? 6000)) fail('No sensor frames received. Start the Kinect helper on this computer, then reconnect.', true);
   }, options.healthIntervalMs ?? 1000);
   socket.onmessage = event => {
     if (stopped) return;
@@ -61,7 +61,32 @@ export function localSensor(inbox: SensorInbox, address: string, onStatus: (stat
       if (!connected) { connected = true; onStatus('connected', frame.device.label, mode); }
     } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
   };
-  socket.onerror = () => fail('Cannot reach the local sensor helper. Start it on this computer, then reconnect.');
-  socket.onclose = () => fail('Local sensor helper disconnected. Restart it, then reconnect.');
+  socket.onerror = () => fail('Cannot reach the local sensor helper. Start it on this computer, then reconnect.', true);
+  socket.onclose = () => fail('Local sensor helper disconnected. Restart it, then reconnect.', true);
   return { stop: () => { stopped = true; clearInterval(health); socket.close(); inbox.reset(); } };
+}
+
+/** Retains no frames across retries. Captures abort; frozen room data is managed separately. */
+export function recoveringSensor(inbox: SensorInbox, address: string, onStatus: (status: LocalSensorState, message: string, mode: LocalSensorMode) => void,
+  options: LocalSensorOptions & { maxReconnects?: number; retryBaseMs?: number } = {}): SensorSource {
+  let stopped = false, attempts = 0, healthySince = 0, child: SensorSource | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined, expectedMode: LocalSensorMode | null = null;
+  const start = () => {
+    if (stopped) return;
+    child = localSensor(inbox, address, (state, message, mode, recoverable) => {
+      if (stopped) return;
+      if (state === 'connected' || state === 'waiting') {
+        if (expectedMode && mode !== expectedMode) { stopped = true; inbox.reset('Sensor source changed across reconnect.'); onStatus('error', 'Sensor source changed. Reconnect explicitly before acquiring again.', mode); queueMicrotask(() => child?.stop()); return; }
+        expectedMode = mode;
+      }
+      if (state === 'connected') { if (healthySince && Date.now() - healthySince > 30000) attempts = 0; if (!healthySince) healthySince = Date.now(); }
+      if (state === 'error' && recoverable && mode !== 'replay' && attempts < (options.maxReconnects ?? 6)) {
+        healthySince = 0; attempts++;
+        onStatus('connecting', `Sensor interrupted. Room retained; reconnecting (${attempts}/${options.maxReconnects ?? 6})…`, mode);
+        timer = setTimeout(start, Math.min(8000, (options.retryBaseMs ?? 500) * 2 ** (attempts - 1)));
+      } else onStatus(state, message, mode);
+    }, options);
+  };
+  start();
+  return { stop: () => { stopped = true; if (timer) clearTimeout(timer); child?.stop(); } };
 }

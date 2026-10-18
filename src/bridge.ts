@@ -4,6 +4,8 @@ import { isOutputCalibrationCommand } from './shared/outputPermissions';
 import { reduceBatch } from './shared/studioScene';
 import { adjustmentFor } from './shared/adjustments';
 import { recordAdjustment, roomId } from './manualEvents';
+import { physicalStatus } from './physicalGuard';
+import { assertPhysicalFill } from './shared/physicalEligibility';
 
 declare global { interface Window { projection?: Bridge } }
 
@@ -68,10 +70,16 @@ function browserBridge(): Bridge {
 
 const rawBridge = window.projection ?? browserBridge();
 /** Agent execution deliberately bypasses manual demonstration recording. */
-export const agentDispatch = rawBridge.dispatch;
-export const agentBatch = rawBridge.batch;
-export const bridge: Bridge = { ...rawBridge, dispatch: async command => {
-  const before = await rawBridge.getSnapshot(), result = await rawBridge.dispatch(command);
+export const agentDispatch: Bridge['dispatch'] = async command => {
+  try { const before = await rawBridge.getSnapshot(); assertPhysicalFill(before.scene, command, physicalStatus()); return await rawBridge.dispatch(command); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+};
+export const agentBatch: Bridge['batch'] = rawBridge.batch ? async (commands, revision) => {
+  try { const before = await rawBridge.getSnapshot(); for (const command of commands) assertPhysicalFill(before.scene, command, physicalStatus()); return await rawBridge.batch!(commands, revision); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+} : undefined;
+export const bridge: Bridge = { ...rawBridge, batch: agentBatch, dispatch: async command => {
+  const before = await rawBridge.getSnapshot(), result = await agentDispatch(command);
   if (result.ok) {
     try { const event = adjustmentFor(command, before.scene, result.scene, roomId(), crypto.randomUUID()); if (event) recordAdjustment(event); }
     catch { /* Memory storage must never prevent a manual edit. */ }

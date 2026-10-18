@@ -3,6 +3,7 @@ import { patternSequence } from './calibrationPatterns.js';
 import { validateSession, type SensorFrame, type SensorSession } from './sensor.js';
 import { add, sub, dot, cross, scale, unit, length, type Surface, type Vec3 } from './spatial.js';
 import { captureDepthWitness, validateMeasurement, type SurfaceMeasurement } from './measured.js';
+import { cameraToRoom, roomTransform, roomMatchesFrame, validateRoomReference, type RoomReference } from './roomModel.js';
 
 export interface SurfaceCandidate {
   id: string; label: string; kind: 'table' | 'wall' | 'unknown';
@@ -154,14 +155,18 @@ function measuredMask(reference: SensorFrame, indices: Set<number>, uv: (p: Vec3
   return { width: size, height: size, bits };
 }
 
-export function solveRoomSurfaces(session: SensorSession): RoomSolve {
+export function solveRoomSurfaces(session: SensorSession, room?: RoomReference): RoomSolve {
   const decoded = decodeProjectorPixels(session), { reference, pixels, width, height } = decoded;
+  if (room) {
+    validateRoomReference(room);
+    if (room.invalidated) throw new Error('The saved room was invalidated by movement or a sensor change. Capture a new room reference.');
+    if (session.provenance !== room.source || !session.frames.every(frame => roomMatchesFrame(room, frame))) throw new Error('Capture does not match the saved room. Re-scan after fixing the rig.');
+  }
   const samples: Sample[] = [];
   for (let i = 0; i < pixels.length; i++) if (pixels[i]) samples.push({ index: i, p: at(reference, i), target: pixels[i]! });
   if (samples.length < 300) throw new Error('Too few projector pixels were visible. Aim both devices at the same surface, dim the room and capture again.');
-  const floor = reference.floorPlane, up: Vec3 = floor ? [floor[0], floor[1], floor[2]] : [0, 1, 0];
-  const right = unit(sub([-1, 0, 0], scale(up, dot([-1, 0, 0], up)))), forward = unit(cross(right, up));
-  const world = (p: Vec3, position = false): Vec3 => [dot(p, right), dot(p, up) + (position ? floor?.[3] ?? 0 : 0), dot(p, forward)];
+  const transform = room?.transform ?? roomTransform(reference.floorPlane), floor = transform.floorAligned, up = transform.up;
+  const world = (p: Vec3, position = false): Vec3 => cameraToRoom(p, transform, position);
   let remaining = samples; const candidates: SurfaceCandidate[] = [], failures: string[] = [];
   for (let planeIndex = 0; planeIndex < 6 && remaining.length >= 300; planeIndex++) {
     const plane = planeRansac(remaining); if (!plane) break;
@@ -188,10 +193,10 @@ export function solveRoomSurfaces(session: SensorSession): RoomSolve {
       const stageW = Math.min(viewport.width, viewport.height * 16 / 9), stageH = stageW * 9 / 16;
       const quad = FULL_QUAD.map(p => { const pixel = project(fit.h, p); return { x: (rect.x + pixel.x * rect.width - (viewport.width - stageW) / 2) / stageW, y: (rect.y + pixel.y * rect.height - (viewport.height - stageH) / 2) / stageH }; }) as Quad;
       if (!isValidProjectionQuad(quad)) throw new Error('Surface projects with an unsupported orientation. Reposition the Kinect.');
-      const elevation = floor ? dot(center, up) + floor[3] : null, horizontal = Math.abs(dot(n, up));
+      const elevation = floor ? dot(center, up) + transform.heightOffset : null, horizontal = Math.abs(dot(n, up));
       const kind = floor && horizontal > .94 && elevation! >= .35 && elevation! <= 1.5 ? 'table' : floor && horizontal < .25 ? 'wall' : 'unknown';
       const measurement: SurfaceMeasurement = { sessionId: session.id, sensorId: reference.device.id, capturedAtMs: reference.capturedAtMs, source: session.provenance,
-        rmsPx: fit.rms, correspondences: good.size, quad, raster: { width, height }, viewport: { ...viewport }, mask: measuredMask(reference, good, uv), floorAligned: !!floor, depthWitness: captureDepthWitness(reference) };
+        rmsPx: fit.rms, correspondences: good.size, quad, raster: { width, height }, viewport: { ...viewport }, mask: measuredMask(reference, good, uv), floorAligned: !!floor, depthWitness: captureDepthWitness(reference), ...(room ? { roomReferenceId: room.id } : {}) };
       validateMeasurement(measurement);
       const surface: Surface = { id: kind === 'wall' ? 'wall' : 'tabletop', name: kind === 'wall' ? 'Measured wall' : 'Measured tabletop', kind: kind === 'wall' ? 'wall' : 'table',
         provenance: session.provenance === 'sensor' ? 'measured' : 'simulated', origin: world(add(center, add(scale(u, x0), scale(v, y0))), true), u: world(u), v: world(v), width: sw, height: sh,

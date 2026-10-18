@@ -15,7 +15,7 @@ function Fixture() {
   const [checks, setChecks] = useState({});
   useEffect(() => {
     const worker = new Worker(new URL('../src/roomSolve.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = ({data}) => { if (data.error) setStatus(data.error); else { setResult(data.result); setStatus('Synthetic solve complete'); } }; worker.postMessage(measuredRoomFixture());
+    worker.onmessage = ({data}) => { if (data.error) setStatus(data.error); else { setResult(data.result); setStatus('Synthetic solve complete'); } }; worker.postMessage({ session: measuredRoomFixture() });
     return () => worker.terminate();
   }, []);
   function apply() {

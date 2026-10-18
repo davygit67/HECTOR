@@ -1,4 +1,5 @@
 import { programWorkshop } from './programWorkshop';
+import { registerPhysicalStatus } from './physicalGuard';
 import { programStatuses } from './programRuntime';
 import { agentBatch, bridge } from './bridge';
 import { roomId, recordAdjustment } from './manualEvents';
@@ -21,7 +22,7 @@ interface UIAdapter {
 let ui: UIAdapter | undefined;
 let hardware: { status(): HardwareStatus; execute(command: HardwareAction): Promise<string> } | undefined;
 export function registerStudioUI(adapter: UIAdapter) { ui = adapter; return () => { if (ui === adapter) ui = undefined; }; }
-export function registerHardware(adapter: NonNullable<typeof hardware>) { hardware = adapter; return () => { if (hardware === adapter) hardware = undefined; }; }
+export function registerHardware(adapter: NonNullable<typeof hardware>) { hardware = adapter; const unregister = registerPhysicalStatus(adapter.status); return () => { unregister(); if (hardware === adapter) hardware = undefined; }; }
 const libraryKey = 'projection-mapper.compositions.v1';
 declare global { interface Window { projectionLibrary?: { read(): Promise<Composition[]>; write(items: Composition[]): Promise<void> } } }
 const listeners = new Set<() => void>();

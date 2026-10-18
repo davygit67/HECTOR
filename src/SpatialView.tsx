@@ -1,3 +1,4 @@
+import { getRoomReference, loadRoomReference, roomReferenceRevision } from './roomModelStore';
 import { programRevision } from './programRuntime';
 import { measuredMaskPath } from './shared/measured';
 import { layerOpacity, layerVisible, renderWidth, surfaceLayers } from './shared/layers';
@@ -149,6 +150,8 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
     camera.position.set(4.2, 3.4, 4.8); camera.lookAt(0, 1, -.3);
     const controls = view === 'orbit' ? new OrbitControls(camera, renderer.domElement) : null;
     if (controls) { controls.target.set(0, 1, -.3); controls.enableDamping = true; controls.minDistance = 2; controls.maxDistance = 11; controls.maxPolarAngle = Math.PI * .49; controls.listenToKeyEvents(renderer.domElement); controls.saveState(); }
+    void loadRoomReference().catch(() => {});
+    let lastRoomRevision = -1, framedRoomId = '';
     const geometries: THREE.BufferGeometry[] = [], materials: THREE.Material[] = [], sprites: THREE.Texture[] = [];
     let meshes: { id: string; mesh: THREE.Mesh; material: THREE.ShaderMaterial }[] = [], lastGeometry = -1, lastSelection = '', lastViewer = '', frame = 0;
     const collect = <T extends THREE.BufferGeometry | THREE.Material>(value: T): T => { if (value instanceof THREE.BufferGeometry) geometries.push(value); else materials.push(value); return value; };
@@ -168,13 +171,31 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
     function rebuild() {
       world.clear(); geometries.splice(0).forEach(g => g.dispose()); materials.splice(0).forEach(m => m.dispose()); sprites.splice(0).forEach(t => t.dispose()); meshes = [];
       const state = current.current.scene, isOutput = view.startsWith('projector');
+      const room = view === 'orbit' ? getRoomReference() : null;
+      lastRoomRevision = roomReferenceRevision();
+      if (room) {
+        const geometry = collect(new THREE.BufferGeometry());
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(room.positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(room.colors.map(n => n / 255), 3));
+        world.add(new THREE.Points(geometry, collect(new THREE.PointsMaterial({ size: .018, vertexColors: true }))));
+        if (controls && framedRoomId !== room.id) {
+          geometry.computeBoundingBox(); const box = geometry.boundingBox!, center = box.getCenter(new THREE.Vector3()), span = Math.max(1, box.getSize(new THREE.Vector3()).length());
+          controls.target.copy(center); controls.maxDistance = Math.max(11, span * 4);
+          camera.position.copy(center).add(new THREE.Vector3(span * .45, span * .4, span));
+          controls.update(); controls.saveState(); framedRoomId = room.id;
+        }
+        label('Measured Kinect view · meters', new THREE.Vector3(0, room.transform.heightOffset + .2, 0), '#a4d9cf');
+      }
       if (!isOutput) {
         const grid = new THREE.GridHelper(7, 28, '#4c5d51', '#293d32'); world.add(grid); geometries.push(grid.geometry); materials.push(...(Array.isArray(grid.material) ? grid.material : [grid.material]));
       }
       const table = state.surfaces.find(s => s.id === 'tabletop')!;
+      if (!table.measurement && !room) {
       addBox([table.origin[0] + table.width / 2, table.origin[1] - .055, table.origin[2] + table.height / 2], [table.width + .025, .10, table.height + .025], isOutput ? '#000000' : '#35473b');
       for (const x of [.12, table.width - .12]) for (const z of [.12, table.height - .12]) addBox([table.origin[0] + x, table.origin[1] / 2 - .055, table.origin[2] + z], [.065, Math.max(.04, table.origin[1] - .1), .065], isOutput ? '#000000' : '#344238');
+      }
       for (const surface of state.surfaces) {
+        if (room && surface.measurement?.roomReferenceId !== room.id) continue;
         const material = surfaceMaterial(getArtwork(state, surface, Date.now()).texture, getMask(state, surface), 0, !!surface.measurement); materials.push(material);
         const mesh = new THREE.Mesh(collect(surfaceGeometry(surface)), material); mesh.userData.surfaceId = surface.id; world.add(mesh); meshes.push({ id: surface.id, mesh, material });
         if (view === 'orbit') {
@@ -185,7 +206,7 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
           const center = surfacePoint(surface, { x: .5, y: .5 }); label(surface.name, new THREE.Vector3(center[0], center[1] + .2, center[2]), '#d1e5cd');
         }
       }
-      if (view === 'orbit') {
+      if (view === 'orbit' && !room) {
         for (const p of state.projectors) {
           addBox(p.position, [.20, .12, .16], p.enabled ? p.color : '#58635a');
           label(p.name.replace('Projector ', 'P / '), new THREE.Vector3(p.position[0], p.position[1] + .22, p.position[2]), p.enabled ? p.color : '#899489');
@@ -218,7 +239,7 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
       if (!visible || !renderVisible(element) || time - lastRender < interval) { frame = requestAnimationFrame(render); return; }
       lastRender = time;
       const state = current.current.scene;
-      if (lastGeometry !== state.geometryRevision || lastSelection !== state.selectedSurfaceId || lastViewer !== JSON.stringify(state.viewer.position)) rebuild();
+      if (lastRoomRevision !== roomReferenceRevision() || lastGeometry !== state.geometryRevision || lastSelection !== state.selectedSurfaceId || lastViewer !== JSON.stringify(state.viewer.position)) rebuild();
       if (view !== 'orbit') {
         const pose: CameraPose = view === 'viewer' ? state.viewer : state.projectors.find(p => p.id === view)!;
         camera.position.set(...pose.position); camera.lookAt(...pose.target); camera.fov = pose.fov; camera.aspect = pose.aspect; camera.updateProjectionMatrix();

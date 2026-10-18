@@ -9,9 +9,12 @@ export interface SurfaceMeasurement {
   viewport: { width: number; height: number; devicePixelRatio: number };
   mask: { width: number; height: number; bits: string };
   floorAligned: boolean;
+  /** Frozen metric frame used by this calibration; new room captures retire this fit. */
+  roomReferenceId?: string;
   depthWitness?: { width: number; height: number; step: number; meters: number[] };
 }
 export function validateMeasurement(m: SurfaceMeasurement) {
+  if (m?.roomReferenceId !== undefined && (typeof m.roomReferenceId !== 'string' || !m.roomReferenceId || m.roomReferenceId.length > 128)) throw new Error('Invalid room reference.');
   if (!m || !['sensor', 'synthetic'].includes(m.source) || typeof m.sessionId !== 'string' || !m.sessionId || m.sessionId.length > 128 ||
       typeof m.sensorId !== 'string' || !m.sensorId || m.sensorId.length > 128 || !Number.isFinite(m.capturedAtMs) || m.capturedAtMs < 0 ||
       !Number.isFinite(m.rmsPx) || m.rmsPx < 0 || m.rmsPx > 3 || !Number.isSafeInteger(m.correspondences) || m.correspondences < 100 ||

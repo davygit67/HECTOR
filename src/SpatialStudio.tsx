@@ -1,3 +1,5 @@
+import { getRoomReference, subscribeRoomReference } from './roomModelStore';
+import { useSyncExternalStore } from 'react';
 import { configurePrograms } from './programRuntime';
 import { configureMedia } from './nativeMedia';
 import { useEffect, useRef, useState } from 'react';
@@ -32,6 +34,7 @@ export function SpatialStudio() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('room'), [inspector, setInspector] = useState<Inspector>('assistant'), [coverage, setCoverage] = useState(false), [reset, setReset] = useState(0);
   const [, refreshTimers] = useState(0);
+  const roomReference = useSyncExternalStore(subscribeRoomReference, getRoomReference);
   const now = Date.now();
   const [playing, setPlaying] = useState(false);
   const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
@@ -146,7 +149,7 @@ export function SpatialStudio() {
             <button className={mode === 'align' ? 'active' : ''} aria-pressed={mode === 'align'} onClick={() => setMode('align')}>Manual alignment</button>
           </div>{mode === 'room' ? <label className="grid-toggle"><input type="checkbox" checked={coverage} onChange={e => setCoverage(e.target.checked)} />Coverage</label> : <label className="grid-toggle"><input type="checkbox" checked={scene.showGrid} onChange={e => send({ type: 'grid.set', visible: e.target.checked })} />Test grid</label>}</div>
           {mode === 'room' ? <div className="room-stage"><SpatialView scene={scene} view="orbit" coverage={coverage} resetKey={reset} onSelect={selectSurface} />
-            <div className="room-chip"><span className="status-dot" />Room frame · meters, {scene.frame.provenance === 'mixed' ? 'measured surfaces + simulation' : 'simulated'}</div>
+            <div className="room-chip"><span className="status-dot" />{roomReference ? 'Measured Kinect room · meters · fixed reference' : `Room frame · meters, ${scene.frame.provenance === 'mixed' ? 'measured surfaces + simulation' : 'simulated'}`}</div>
             <button className="reset-view" onClick={() => setReset(n => n + 1)}>Reset view</button>
             {coverage && <div className="coverage-legend"><span><i className="a" />A</span><span><i className="b" />B</span><span><i className="overlap" />Overlap</span><span><i className="none" />Uncovered</span></div>}
           </div> : null}

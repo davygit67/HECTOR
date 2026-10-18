@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { localSensor, type LocalSensorMode, type LocalSensorState } from '../src/sensorSources.ts';
+import { localSensor, recoveringSensor, type LocalSensorMode, type LocalSensorState } from '../src/sensorSources.ts';
 import { parseSensorBridgeStatus, validateSensorBridgeStatus } from '../src/shared/sensorBridge.ts';
 import { SensorInbox } from '../src/shared/sensorStream.ts';
 import { encodeSensorFrame } from '../src/shared/sensor.ts';
@@ -64,4 +64,26 @@ test('fatal helper errors and malformed frames clear data; stopped sources ignor
   assert.equal(f.events.at(-1)?.message, 'SDK missing.'); assert.equal(f.inbox.latest, null); const count = f.events.length;
   f.socket.send(frame(1)); f.socket.onerror?.(); assert.equal(f.events.length, count); f.source.stop();
   const invalid = fixture(); invalid.socket.send(new ArrayBuffer(5)); assert.equal(invalid.events.at(-1)?.state, 'error'); invalid.source.stop();
+});
+
+test('automatic recovery resets acquisition, ignores old sockets, accepts sequence zero and stops retrying on demand', async () => {
+  const sockets: Socket[] = [], inbox = new SensorInbox(), events: string[] = [];
+  const source = recoveringSensor(inbox, 'ws://localhost:5174', state => events.push(state), { retryBaseMs: 2, createSocket: () => { const s = new Socket(); sockets.push(s); return s as unknown as WebSocket; } });
+  sockets[0].send(status()); sockets[0].send(frame(9)); const generation = inbox.generation;
+  const waiting = inbox.waitAfter(Date.now() + 10000, new AbortController().signal);
+  sockets[0].onclose?.(); await assert.rejects(waiting, /disconnected/); assert.equal(inbox.latest, null); assert.ok(inbox.generation > generation);
+  await pause(20); assert.equal(sockets.length, 2);
+  sockets[0].send(frame(10)); assert.equal(inbox.latest, null);
+  sockets[1].send(status()); sockets[1].send(frame(0)); assert.equal(events.at(-1), 'connected');
+  sockets[1].onerror?.(); source.stop(); await pause(20); assert.equal(sockets.length, 2);
+});
+test('recovery is bounded and does not retry corrupt data, fatal SDK failures or ended replay', async () => {
+  const sockets: Socket[] = [], inbox = new SensorInbox(), events: string[] = [];
+  const source = recoveringSensor(inbox, 'ws://localhost:5174', state => events.push(state), { maxReconnects: 1, retryBaseMs: 2, createSocket: () => { const s = new Socket(); sockets.push(s); return s as unknown as WebSocket; } });
+  sockets[0].onerror?.(); await pause(20); sockets[1].onerror?.(); await pause(20); assert.equal(events.at(-1), 'error'); assert.equal(sockets.length, 2); source.stop();
+  for (const payload of [new ArrayBuffer(3), status('live', 'error', 'No SDK'), status('replay', 'ended')]) {
+    let calls = 0; const socket = new Socket();
+    const stopped = recoveringSensor(new SensorInbox(), 'ws://localhost:5174', () => {}, { retryBaseMs: 2, createSocket: () => { calls++; return socket as unknown as WebSocket; } });
+    socket.send(payload); await pause(10); assert.equal(calls, 1); stopped.stop();
+  }
 });
