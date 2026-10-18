@@ -4,9 +4,11 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
-## Selected curved object and slow movement — October 18, in progress
+## Selected curved object and slow movement — October 18, published
 
-Canvas owns 3D projector calibration, explicit RGB-click object selection, bounded observed-shape tracking and exclusive projector color masks with loss blanking. Agent implements compatible Studio actions/context/eligibility/feedback with 144 checks/build and five real OpenAI scenarios across isolated test runs; a discovered read-only completion-review bug was corrected and regression-tested. Shared contracts are agreed. No semantic recognition, hidden-face reconstruction, general 6DOF tracking or helper protocol change is claimed. No Git/publication/runtime actions during concurrent implementation; canvas integrated checks remain pending. The published flat-surface milestone below remains the current verified release.
+Canvas owns 3D projector calibration, explicit RGB-click object selection, bounded observed-shape tracking and exclusive projector color masks with loss blanking. Agent implements compatible Studio actions/context/eligibility/feedback with 144 checks/build and five real OpenAI scenarios across isolated test runs; a discovered read-only completion-review bug was corrected and regression-tested. No semantic recognition, hidden-face reconstruction, general 6DOF tracking or helper protocol change is claimed.
+
+Agent commit `d1f47eb` and canvas commit `beb5a65` are published on main, followed by canvas publication note `8c60d41`. Canvas reports 224 root tests and production/desktop build passing. The earlier actual-fullscreen object fixture passed 16 assertions with native-like clock uncertainty; an expanded run passed 15 before fullscreen loss correctly blocked the remaining phase, so it is not a passing 18-check run. The integrated 40-pattern Hardware fixture passed nine assertions with explicitly simulated fullscreen status. See [the curved-object guide](../CURVED_OBJECTS_V1.md) for exact evidence and limits. Physical Windows/Kinect/projector qualification remains pending. The agent independently confirmed clean matching local/origin heads at `8c60d41`; guarded sync returned up-to-date. Final agent release notes follow this milestone, then normal idle/clean synchronization resumes. No live scene/player changes or host restart occurred.
 
 ## Fixed-rig room reference and recovery — October 18, published
 
