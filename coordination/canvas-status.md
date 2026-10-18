@@ -1,6 +1,6 @@
 # Canvas task status
 
-## Fixed-rig Kinect room integration — verified, publishing October 18
+## Fixed-rig Kinect room integration — published October 18
 
 Implemented the user-requested stable metric intermediary in the existing Hardware/Studio UI: twelve fresh depth/XYZ observations, bounded worker median/consensus aggregation, saved camera-to-room frame and cloud, shared 3D-canvas visualization, anchored Gray-code plane fits, and persistent invalidation after detected movement/sensor change. Unknown rays stay empty. Cloud/measurement reference IDs keep calibrated surfaces in one metric frame. Device-local IndexedDB saves the room; cross-tab notifications retire stale references. Existing content/output remains intact during loss; new physical fills require fresh, matching reference/sensor/output eligibility checked again immediately before application. Cleared fills remain available offline.
 
@@ -8,7 +8,7 @@ Browser transport retries transient connection failures with bounded backoff and
 
 Validation:214root tests and production/desktop build pass; isolated real HardwareWorkspace/worker/IndexedDB/SpatialView workflow passes13browser assertions, including persisted movement warning, retained cloud, automatic reconnect, revalidation and rejection of fill without a qualified projector. Agent owner reports133agent and23helper checks/builds (including existing actual C# encoder fixtures), plus real OpenAI scan→map→fill against isolated synthetic ports. Synthetic geometry and rendering are not physical accuracy evidence. Windows USB, SDK acquisition/restart and projected footprint still need the friend’s hardware. Browser Studio is the supported Kinect route; native custom-origin helper access remains unqualified.
 
-Inspected Microsoft RoomAlive source at51a39f18ccff15699cf5c3a35111774ccbb0287c (repeated-depth accumulation and variance rejection), SDK mapping docs, PCL plane segmentation and RTAB/OpenRoomAlive precedents. Original implementation; no upstream engine code/binaries vendored. KINECT_ROOM_V1.md documents flow, setup, bounds, evidence and next work. Clean guarded sync preceded edits; publication coordinated by explicit ownership. Live preview/media host retained, no test edits to user scene or audio; tests use isolated5175. Agent commit is local awaiting the root integration commit/push; keep sync deferred until publication is complete.
+Inspected Microsoft RoomAlive source at51a39f18ccff15699cf5c3a35111774ccbb0287c (repeated-depth accumulation and variance rejection), SDK mapping docs, PCL plane segmentation and RTAB/OpenRoomAlive precedents. Original implementation; no upstream engine code/binaries vendored. KINECT_ROOM_V1.md documents flow, setup, bounds, evidence and next work. Clean guarded sync preceded edits; publication coordinated by explicit ownership. Live preview/media host retained, no test edits to user scene or audio; tests use isolated5175. Agent/helper commit `db511bb` and canvas commit `b289332` are published on GitHub main; local/origin equality and clean checkout were verified. Isolated5175 browser fixture was shut down. Final owner documentation publication is coordinated; normal idle/clean synchronization resumes after that note.
 
 ## Generated program runtime — published October 18
 
