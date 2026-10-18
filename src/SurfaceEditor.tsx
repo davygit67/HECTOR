@@ -1,3 +1,5 @@
+import { programInput } from './programRuntime';
+import { programPoint } from './shared/programInput';
 import { measuredMaskCSS } from './shared/measured';
 import { readMediaPicture } from './nativeMedia';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
@@ -143,7 +145,7 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
         {layers.filter(c => 'kind' in c && c.kind !== 'art' && layerVisible(c)).map(c => 'kind' in c && !(c.kind === 'youtube' && !window.projectionMedia && showPlayers) ? <div key={c.id} className="painted-layer" data-layer-id={c.id} style={{ zIndex: zIndex(c.id), opacity: layerOpacity(c) }}>
           <LayerArtwork content={c} scene={scene} output={clean} active={active} />
         </div> : null)}
-        {!clean && !aligning && scene.contents.filter(c => c.surfaceId === surface.id && c.kind !== 'art' && layerVisible(c) && !(playing && c.kind === 'youtube')).map(c => <div key={c.id}
+        {!clean && !aligning && scene.contents.filter(c => c.surfaceId === surface.id && c.kind !== 'art' && layerVisible(c) && !(playing && (c.kind === 'youtube' || c.kind === 'program'))).map(c => <div key={c.id}
           className={'content-hitbox ' + (c.id === scene.selectedContentId ? 'selected ' : '') + (playing && c.kind === 'game' ? 'playing' : '')}
           style={{ left: c.bounds.x * WIDTH, top: c.bounds.y * HEIGHT, width: c.bounds.w * WIDTH, height: c.bounds.h * HEIGHT, zIndex: zIndex(c.id), cursor: c.layer?.locked ? 'default' : undefined }}
           role="group" aria-label={c.title + ' · ' + c.kind} tabIndex={0}
@@ -155,6 +157,15 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
               disabled={c.state.status !== 'running'} onClick={() => send?.({ type: 'game.hit', id: c.id, round: c.state.round, target: index })} />)}
           </div> : <button className="resize-handle" aria-label={'Resize ' + c.title} onPointerDown={event => start(event, 'resize', undefined, undefined, c)} />}
         </div>)}
+        {active && !alignmentEditing && (clean || playing && !aligning) && scene.contents.filter(c => c.kind === 'program' && c.surfaceId === surface.id && layerVisible(c)).map(c => <div key={'input-' + c.id}
+          role="application" aria-label={'Interact with ' + c.title} tabIndex={0}
+          style={{ position: 'absolute', left: c.bounds.x * WIDTH, top: c.bounds.y * HEIGHT, width: c.bounds.w * WIDTH, height: c.bounds.h * HEIGHT, zIndex: zIndex(c.id), touchAction: 'none', cursor: 'crosshair', outline: 'none' }}
+          onPointerDown={event => { event.stopPropagation(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId); const r = viewport.current!.getBoundingClientRect(); const p = programPoint(quad, { x: (event.clientX-r.left)/r.width, y: (event.clientY-r.top)/r.height },c.bounds); if (p) programInput(c.id, { type: 'pointerdown', ...p }); }}
+          onPointerMove={event => { event.stopPropagation(); const r = viewport.current!.getBoundingClientRect(); const p = programPoint(quad, { x: (event.clientX-r.left)/r.width, y: (event.clientY-r.top)/r.height },c.bounds); if (p) programInput(c.id, { type: 'pointermove', ...p }); }}
+          onPointerUp={event => { event.stopPropagation(); const r = viewport.current!.getBoundingClientRect(); const p = programPoint(quad, { x: (event.clientX-r.left)/r.width, y: (event.clientY-r.top)/r.height },c.bounds); if (p) programInput(c.id, { type: 'pointerup', ...p }); }}
+          onPointerCancel={() => programInput(c.id, { type: 'pointerup', x: .5, y: .5 })}
+          onKeyDown={event => { if (event.key === 'Escape' || !/^[a-zA-Z0-9 _-]{1,24}$/.test(event.key)) return; event.stopPropagation(); event.preventDefault(); if (!event.repeat) programInput(c.id, { type: 'keydown', key: event.key }); }}
+          onKeyUp={event => { if (event.key === 'Escape' || !/^[a-zA-Z0-9 _-]{1,24}$/.test(event.key)) return; event.stopPropagation(); event.preventDefault(); programInput(c.id, { type: 'keyup', key: event.key }); }} />)}
         {scene.showGrid && <><div className="grid-axis horizontal" /><div className="grid-axis vertical" />
           <span className="grid-label tl">01 · TOP LEFT</span><span className="grid-label tr">02 · TOP RIGHT</span>
           <span className="grid-label br">03 · BOTTOM RIGHT</span><span className="grid-label bl">04 · BOTTOM LEFT</span>

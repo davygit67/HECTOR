@@ -33,8 +33,11 @@ Choose **Tabletop** or **Back wall**, then use the content buttons:
 | Living art | Aurora, stars, contours, swimming fish; palette, speed, seed, pause/reset |
 | YouTube | Search by topic or supply a link; official player, live color backlight, brightness/spread/smoothing |
 | Target game | Configurable rounds; start/pause/reset and click the lit cell |
+| Generated program | AI-authored 2D animations and pointer/keyboard games; offstage tests, parameter controls, pause/reset and rollback |
 
 Use **Surface layout** to arrange panels; the **Content** inspector edits their configuration. Panels may overlap. Initial placement prefers free space, then overlaps while keeping the requested size where the boundary permits. Moves and attachments preserve size and may overlap other content; native boundaries and enabled exclusions remain enforced. Each surface supports five assets total, including timers and its single artwork background. Living art opens the existing background for editing; ordinary assistant artwork requests update that background instead of attempting a duplicate. Editing, playback controls and same-surface moves use no extra slots. Older over-capacity saves remain readable and editable; additions are blocked until a slot is available. Covered items remain selectable from the content list.
+
+Use **Create with AI** to request original animations or games. Generated programs are tested offstage and use the same Content list, surface geometry and projection controls. See [generated programs](GENERATED_PROGRAMS.md) for the workflow, limits and storage.
 
 Start a target game, then use **Play on canvas**. **Arrange panels** returns to dragging/resizing. Scoring and round progression run locally; the AI cannot award hits. This is pointer interaction, not Kinect/hand tracking.
 
@@ -110,8 +113,8 @@ The manual adapter uses a 1920 × 1080 logical canvas with letterboxing. It maps
 - Geometry, dimensions, projector poses and the viewer are simulated. The sensor capture/record/replay software exists, but native Windows/Kinect qualification, measured surface discovery and automatic calibration remain unverified or future work.
 - Visibility uses plane occlusion and sampled 128 × 128 weight masks. Overlap is nominal, without measured brightness/gamma/black-level matching or hardware synchronization.
 - The 3D views share 768 × 432 surface textures; procedural artwork updates at 20 Hz. These are preview limits, not native projector resolution claims.
-- Chat is typed. Voice, other streaming providers, generated images, general generated games and motion interaction are not implemented.
-- Recipes are supplied/generated text, not verified web recipes. Art is parameterized procedural rendering. Titles are labels; the selected preset determines appearance. The inspector describes the actual preset. No generated executable code is run.
+- Chat is typed. Voice, other streaming providers, generated images/video and physical motion interaction are not implemented. Original 2D animation/game programs are available through the tested generated-program runtime.
+- Recipes are supplied/generated text, not verified web recipes. Art is parameterized procedural rendering. Titles are labels; the selected preset determines appearance. The inspector describes the actual preset. Generated programs are a separate content kind running in an isolated interpreter with bounded drawing commands.
 - The fixed human view previews attached content, not head tracking or viewpoint-dependent portals. Timers have visual completion but no alarm yet.
 
 ## Persistence and development

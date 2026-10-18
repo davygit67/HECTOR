@@ -1,6 +1,6 @@
 # Generative projection experiences
 
-October 18, 2026. **Build proposal, not an implemented capability.**
+October 18, 2026. **Roadmap.** The first generated-program runtime and testing-loop slice is implemented; see [its release scope and limitations](GENERATED_PROGRAMS.md). Image/video integrations and the broader experience system below remain proposed.
 
 The next initiative makes the existing Studio an environment in which the agent can author, test, revise and run original visual experiences. Image and video models supply visual assets; generated local programs supply animation, simulation and interaction. All three use the existing spatial scene and projection controls.
 

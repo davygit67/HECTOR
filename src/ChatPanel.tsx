@@ -37,11 +37,11 @@ export function ChatPanel() {
   };
   return <section className="chat-panel" aria-label="Canvas assistant">
     <div className="chat-heading"><div><span className="eyebrow">CREATE WITH A CONVERSATION</span><h3>What belongs here?</h3></div><span className={'chat-status ' + (state.ready ? 'ready' : '')}>{busy ? 'Working' : state.ready ? 'Connected' : state.configurationError || error ? 'Unavailable' : 'Connecting'}</span></div>
-    <p className="hint">Ask for notes, recipes, living art, YouTube videos, games, or timers. Describe a video or paste its link. Your assistant sees the room and places content within its boundaries.</p>
+    <p className="hint">Describe an original animation or interactive game. The assistant writes and tests it, then places it in your room. You can also ask for notes, recipes, videos and timers.</p>
     {(state.configurationError || error) && <div className="chat-error" role="alert"><p>{error ?? state.configurationError}</p><button className="secondary" onClick={reconnect} disabled={busy || reconnecting}>{reconnecting ? 'Reconnecting…' : 'Reconnect'}</button></div>}
     <div ref={messages} className="chat-messages" role="log" aria-label="Assistant conversation" aria-live="polite">
       {!state.messages.length && <div className="chat-welcome"><span>✦</span><p>Start with an idea. Then refine it together.</p>
-        {['Put a rain sounds YouTube video on the wall with backlight.', 'Put a lemon pasta recipe on the wall.', 'Create violet stars on the table.'].map(prompt => <button key={prompt} disabled={busy} onClick={() => setDraft(prompt)}>{prompt}<span>↗</span></button>)}
+        {['Put a rain sounds YouTube video on the wall with backlight.', 'Put a lemon pasta recipe on the wall.', 'Invent a glowing constellation game on the table where I connect stars by clicking them.'].map(prompt => <button key={prompt} disabled={busy} onClick={() => setDraft(prompt)}>{prompt}<span>↗</span></button>)}
       </div>}
       {state.messages.map(message => <article className={'chat-message ' + message.role} key={message.id}><span className="chat-speaker">{message.role === 'user' ? 'YOU' : message.role === 'error' ? 'REQUEST UPDATE' : 'ASSISTANT'}</span><p>{message.text || 'The request ended without a text reply. Check the canvas for changes.'}</p>{message.status === 'incomplete' && <small>Request incomplete · applied changes remain on the canvas</small>}</article>)}
       {busy && <div className="chat-progress" role="status"><i />{state.progress ?? 'Sending…'}</div>}

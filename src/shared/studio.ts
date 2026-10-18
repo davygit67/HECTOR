@@ -1,3 +1,4 @@
+import type { ProgramOperation, ProgramRuntimeStatus } from './program.js';
 import type { Command } from './domain.js';
 import type { Snapshot, OutputCommand } from './bridge.js';
 import type { MediaCommand, MediaState } from './media.js';
@@ -29,10 +30,11 @@ export interface StudioSnapshot {
   output: Snapshot['output']; saveStatus: Snapshot['saveStatus']; saveError: string | null;
   media: (Omit<Partial<MediaState>, 'source'> & { contentId: string; source: string; ready: boolean; status: string; frameReady?: boolean })[];
   assets: { id: string; title: string; kind: string; surfaceId: string; ready?: boolean }[];
+  programs?: ProgramRuntimeStatus[];
   compositions: CompositionSummary[]; hardware: HardwareStatus;
   capabilities: { sceneBatch: boolean; observation: boolean; nativeMedia: boolean; nativeOutput: boolean; fileImportRequiresClick: true; physicalObservation: false };
 }
-export type StudioOperation =
+export type StudioOperation = ProgramOperation
   | { type: 'ui.navigate'; page: StudioUI['page']; view?: StudioView; inspector?: StudioInspector }
   | { type: 'ui.configure'; coverage?: boolean; previews?: boolean; interact?: boolean; resetView?: boolean; expandedAssetId?: string | null }
   | { type: 'output.command'; command: OutputCommand }

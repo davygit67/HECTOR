@@ -1,10 +1,11 @@
+import { validateProgramConfig, type ProgramConfig } from './program.js';
 import { validateBacklightSettings, type BacklightSettings } from './backlight.js';
 import { YOUTUBE_ID, YOUTUBE_LIMITS } from './youtube.js';
 import type { Bounds } from './geometry.js';
 import type { LayerSettings } from './layers.js';
 import { mediaTime, validateMediaConfig, type MediaConfig } from './mediaContent.js';
 
-export type ContentKind = 'note' | 'recipe' | 'art' | 'game' | 'youtube' | 'media';
+export type ContentKind = 'note' | 'recipe' | 'art' | 'game' | 'youtube' | 'media' | 'program';
 /** Actual renderer capabilities. A title cannot change an artwork's appearance. */
 export const ART_PRESETS = {
   aurora: { label: 'Aurora', description: 'Layers of translucent waving light ribbons. Abstract procedural animation, not objects or animals.' },
@@ -20,7 +21,7 @@ export interface ArtConfig { preset: ArtPreset; palette: ArtPalette; speed: numb
 export interface YouTubeConfig { videoId: string; startSeconds: number; backlight: boolean; backlightSettings?: BacklightSettings }
 export interface GameConfig { rounds: number; seed: number }
 export type ContentSpec = { kind: 'note'; config: NoteConfig } | { kind: 'recipe'; config: RecipeConfig }
-  | { kind: 'art'; config: ArtConfig } | { kind: 'game'; config: GameConfig } | { kind: 'youtube'; config: YouTubeConfig } | { kind: 'media'; config: MediaConfig };
+  | { kind: 'art'; config: ArtConfig } | { kind: 'game'; config: GameConfig } | { kind: 'youtube'; config: YouTubeConfig } | { kind: 'media'; config: MediaConfig } | { kind: 'program'; config: ProgramConfig };
 export interface ClockState { running: boolean; startedAt: number; elapsedMs: number }
 export interface ContentBase { id: string; title: string; surfaceId: string; bounds: Bounds; layer?: LayerSettings }
 export type NoteContent = ContentBase & { kind: 'note'; config: NoteConfig; state: Record<string, never> };
@@ -31,7 +32,8 @@ export type GameContent = ContentBase & { kind: 'game'; config: GameConfig; stat
 } };
 export type YouTubeContent = ContentBase & { kind: 'youtube'; config: YouTubeConfig; state: Record<string, never> };
 export type MediaContent = ContentBase & { kind: 'media'; config: MediaConfig; state: { clock: ClockState } };
-export type ContentInstance = YouTubeContent | NoteContent | RecipeContent | ArtContent | GameContent | MediaContent;
+export type ProgramContent = ContentBase & { kind: 'program'; config: ProgramConfig; state: { clock: ClockState; epoch: number } };
+export type ContentInstance = ProgramContent | YouTubeContent | NoteContent | RecipeContent | ArtContent | GameContent | MediaContent;
 export type ContentAction = 'start' | 'pause' | 'reset' | 'next' | 'previous';
 export type ContentCommand =
   | { type: 'content.create'; id: string; surfaceId: string; title: string; spec: ContentSpec }
@@ -54,6 +56,7 @@ export const CONTENT_LIMITS = {
 } as const;
 /** Serializable capabilities; these presets do not imply external asset generation. */
 export const CONTENT_REGISTRY = [
+  { kind: 'program', label: 'Generated program', symbol: '✦', description: 'Ask the assistant to invent a tested animation or interactive game.', layout: 'panel', actions: ['start', 'pause', 'reset'], input: 'pointer', output: ['manual', 'spatial'], defaults: {} },
   { kind: 'media', label: 'Upload media', symbol: '↥', description: 'Import a video or image from this computer.', layout: 'panel', actions: ['start', 'pause', 'reset'], input: 'controls', output: ['manual', 'spatial'], defaults: {} },
   { kind: 'note', label: 'Note', symbol: 'Aa', description: 'A message, checklist or idea.', layout: 'panel', actions: [], input: 'none', output: ['manual', 'spatial'], defaults: { text: 'Make room for an idea.\nEdit this note in the inspector.', accent: '#b8db90' } },
   { kind: 'recipe', label: 'Recipe', symbol: '≡', description: 'Ingredients and one step at a time.', layout: 'panel', actions: ['next', 'previous', 'reset'], input: 'controls', output: ['manual', 'spatial'], defaults: { ingredients: ['200 g pasta', '2 tbsp olive oil', '1 lemon', 'Salt and black pepper'], steps: ['Cook the pasta according to its package directions. Reserve a little cooking water.', 'Toss with olive oil, lemon zest and juice. Add cooking water as needed.', 'Season to taste and serve.'], source: 'Local example · lemon pasta' } },
@@ -61,8 +64,8 @@ export const CONTENT_REGISTRY = [
   { kind: 'youtube', label: 'YouTube', symbol: '▶', description: 'Normal YouTube playback with live color backlight. The local renderer shares the video across all views without screen sharing. Videos start paused and muted. A static site without the local renderer uses a limited embed fallback.', layout: 'panel', actions: [], input: 'player', output: ['manual'], preview: 'placement-placeholder', defaults: { videoId: '', startSeconds: 0, backlight: true } },
   { kind: 'game', label: 'Target game', symbol: '◎', description: 'A scored pointer reaction game.', layout: 'panel', actions: ['start', 'pause', 'reset'], input: 'pointer', output: ['manual', 'spatial'], defaults: { rounds: 8, seed: 42 } },
 ] as const;
-export const contentKinds: ContentKind[] = ['note', 'recipe', 'art', 'game', 'youtube', 'media'];
-export function defaultSpec(kind: ContentKind): ContentSpec { if (kind === 'youtube') throw new Error('Provide a YouTube video URL or ID first.'); if (kind === 'media') throw new Error('Import a local media file first.'); return { kind, config: structuredClone(CONTENT_REGISTRY.find(x => x.kind === kind)!.defaults) } as ContentSpec; }
+export const contentKinds: ContentKind[] = ['note', 'recipe', 'art', 'game', 'youtube', 'media', 'program'];
+export function defaultSpec(kind: ContentKind): ContentSpec { if (kind === 'program') throw new Error('Ask the assistant to create and test a program first.'); if (kind === 'youtube') throw new Error('Provide a YouTube video URL or ID first.'); if (kind === 'media') throw new Error('Import a local media file first.'); return { kind, config: structuredClone(CONTENT_REGISTRY.find(x => x.kind === kind)!.defaults) } as ContentSpec; }
 export function clockMs(clock: ClockState, now: number) { return clock.elapsedMs + (clock.running ? Math.max(0, now - clock.startedAt) : 0); }
 export function changeClock(clock: ClockState, running: boolean, now: number) { clock.elapsedMs = clockMs(clock, now); clock.startedAt = now; clock.running = running; }
 export function randomUnit(seed: number, index: number) {
@@ -91,6 +94,7 @@ function integer(value: unknown, min: number, max: number, label: string) {
 export function validateSpec(spec: ContentSpec) {
   const root = object(spec); exactKeys(root, ['kind', 'config']); const c = object(root.config), l = CONTENT_LIMITS;
   switch (root.kind) {
+    case 'program': validateProgramConfig(c); break;
     case 'media': validateMediaConfig(c); break;
     case 'note': exactKeys(c, ['text', 'accent']); text(c.text, l.noteLength, 'Note'); if (typeof c.accent !== 'string' || !/^#[0-9a-f]{6}$/i.test(c.accent)) throw new Error('Choose a six-digit hex accent color.'); break;
     case 'recipe':
@@ -120,6 +124,7 @@ export function createContent(base: ContentBase, spec: ContentSpec, now: number)
   validateSpec(spec);
   const copy = structuredClone(spec);
   switch (copy.kind) {
+    case 'program': return { ...base, ...copy, state: { epoch: now, clock: { running: false, startedAt: now, elapsedMs: 0 } } };
     case 'media': return { ...base, ...copy, state: { clock: { running: false, startedAt: now, elapsedMs: 0 } } };
     case 'note': case 'youtube': return { ...base, ...copy, state: {} };
     case 'recipe': return { ...base, ...copy, state: { stepIndex: -1 } };
@@ -130,7 +135,10 @@ export function createContent(base: ContentBase, spec: ContentSpec, now: number)
 export function applyContentAction(content: ContentInstance, action: ContentAction, now: number) {
   const actions = CONTENT_REGISTRY.find(x => x.kind === content.kind)!.actions as readonly string[];
   if (!actions.includes(action)) throw new Error(action + ' is not supported by ' + content.kind + '.');
-  if (content.kind === 'media') {
+  if (content.kind === 'program') {
+    if (action === 'reset') { content.state.epoch = Math.max(now, content.state.epoch + 1); content.state.clock = { running: false, startedAt: now, elapsedMs: 0 }; }
+    else changeClock(content.state.clock, action === 'start', now);
+  } else if (content.kind === 'media') {
     if (content.config.mediaType !== 'video') throw new Error('Images have no video playback controls.');
     const elapsedMs = mediaTime(content.config, content.state.clock, now) * 1000;
     content.state.clock = { running: action === 'start', startedAt: now, elapsedMs: action === 'reset' || (action === 'start' && elapsedMs >= content.config.duration * 1000) ? 0 : elapsedMs };
@@ -160,7 +168,8 @@ export function validateContentState(content: ContentInstance) {
   validateSpec({ kind: content.kind, config: content.config } as ContentSpec); object(content.state);
   if (content.kind === 'youtube' && Object.keys(content.state).length) throw new Error('YouTube playback state belongs to its player.');
   if (content.kind === 'recipe') integer(content.state.stepIndex, -1, content.config.steps.length - 1, 'Recipe step');
-  if (content.kind === 'art' || content.kind === 'game' || content.kind === 'media') {
+  if (content.kind === 'program' && (!Number.isSafeInteger(content.state.epoch) || content.state.epoch < 0)) throw new Error('Invalid program epoch.');
+  if (content.kind === 'art' || content.kind === 'game' || content.kind === 'media' || content.kind === 'program') {
     const clock = content.state.clock;
     if (!clock || typeof clock.running !== 'boolean' || !Number.isFinite(clock.startedAt) || !Number.isFinite(clock.elapsedMs) || clock.elapsedMs < 0) throw new Error('Invalid content clock.');
   }

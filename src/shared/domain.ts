@@ -160,6 +160,7 @@ export function reduceScene(scene: Scene, command: Command, now = Date.now()): S
         }
         if (content!.kind === 'game' && content!.state.status !== 'idle') throw new Error('Reset the game before changing its rules.');
         const updated = createContent({ id: content!.id, title: content!.title, surfaceId: content!.surfaceId, bounds: content!.bounds, ...(content!.layer ? { layer: content!.layer } : {}) }, command.spec, now);
+        if (updated.kind === 'program' && content!.kind === 'program' && updated.config.artifactId === content!.config.artifactId) updated.state = content!.state;
         if (updated.kind === 'art' && content!.kind === 'art') updated.state = content!.state;
         if (updated.kind === 'media' && content!.kind === 'media' && updated.config.assetId === content!.config.assetId) updated.state.clock = { ...content!.state.clock, startedAt: now, elapsedMs: mediaTime(content!.config, content!.state.clock, now) * 1000 };
         next.contents[next.contents.indexOf(content!)] = updated;

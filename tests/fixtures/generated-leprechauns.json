@@ -1,0 +1,66 @@
+{
+  "sdkVersion": 1,
+  "title": "Leprechaun Clover Walk",
+  "description": "Original stylized 2D animation of three little leprechauns walking through a field of four-leaf clovers on a transparent background. Adjustable walk speed and clover count.",
+  "source": "({ init(ctx) { return { t: 0, step: 0, walkSpeed: ctx.params.walkSpeed, cloverCount: Math.round(ctx.params.cloverCount), leprechauns: [ { x: 0.28, y: 0.74, phase: 0.0 }, { x: 0.50, y: 0.76, phase: 0.6 }, { x: 0.72, y: 0.73, phase: 1.2 } ] }; }, update(state, ctx) { const walkSpeed = ctx.params.walkSpeed; const cloverCount = Math.max(0, Math.round(ctx.params.cloverCount)); const t = state.t + ctx.dt * walkSpeed; const step = t * 8 * walkSpeed; const leprechauns = state.leprechauns.map((l, i) => { let x = l.x + ctx.dt * walkSpeed * (0.012 + i * 0.0015); if (x > 1.08) x = -0.08; return { x, y: l.y, phase: l.phase, bob: Math.abs(Math.sin(step + l.phase)) }; }); return { t, step, walkSpeed, cloverCount, leprechauns }; }, draw(state, ctx) { const cmds = []; cmds.push({ op: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#000000', alpha: 0 }); const t = state.t; const count = Math.max(0, Math.round(state.cloverCount)); function addClover(cx, cy, s) { cmds.push({ op: 'ellipse', x: cx - 0.02 * s, y: cy - 0.015 * s, rx: 0.045 * s, ry: 0.045 * s, fill: '#4caf50', alpha: 0.9 }); cmds.push({ op: 'ellipse', x: cx + 0.02 * s, y: cy - 0.015 * s, rx: 0.045 * s, ry: 0.045 * s, fill: '#4caf50', alpha: 0.9 }); cmds.push({ op: 'ellipse', x: cx, y: cy - 0.055 * s, rx: 0.045 * s, ry: 0.045 * s, fill: '#4caf50', alpha: 0.9 }); cmds.push({ op: 'ellipse', x: cx, y: cy + 0.025 * s, rx: 0.045 * s, ry: 0.045 * s, fill: '#4caf50', alpha: 0.9 }); cmds.push({ op: 'line', x: cx, y: cy + 0.03 * s, x2: cx + 0.02 * s, y2: cy + 0.12 * s, width: 0.008 * s, color: '#2f7d32', alpha: 0.9 }); } for (let i = 0; i < count; i++) { const fx = (i * 0.173 + 0.07) % 1; const fy = 0.68 + 0.08 * Math.sin(i * 1.7 + t * 0.4) + 0.03 * Math.cos(i * 2.1); const s = 0.42 + 0.08 * Math.sin(i * 3.2); addClover(fx, Math.min(0.93, Math.max(0.53, fy)), s); } for (let i = 0; i < state.leprechauns.length; i++) { const l = state.leprechauns[i]; const walk = Math.sin(state.step + i * 1.7); const bob = 0.014 * Math.abs(Math.sin(state.step + i)); const x = l.x; const y = l.y - bob; cmds.push({ op: 'ellipse', x: x - 0.012, y: y + 0.01, rx: 0.022, ry: 0.03, fill: '#6b3f1e', alpha: 1 }); cmds.push({ op: 'ellipse', x: x, y: y, rx: 0.038, ry: 0.044, fill: '#f3c7a6', alpha: 1 }); cmds.push({ op: 'rect', x: x - 0.028, y: y - 0.055, w: 0.056, h: 0.04, fill: '#1f7a36', alpha: 1 }); cmds.push({ op: 'rect', x: x - 0.035, y: y - 0.025, w: 0.07, h: 0.018, fill: '#0d4f20', alpha: 1 }); cmds.push({ op: 'rect', x: x - 0.04, y: y + 0.045, w: 0.03, h: 0.06, fill: '#1b5f2a', alpha: 1 }); cmds.push({ op: 'rect', x: x + 0.01, y: y + 0.045, w: 0.03, h: 0.06, fill: '#1b5f2a', alpha: 1 }); cmds.push({ op: 'line', x: x - 0.015, y: y + 0.105, x2: x - 0.035, y2: y + 0.14 + 0.01 * walk, width: 0.008, color: '#6b3f1e' }); cmds.push({ op: 'line', x: x + 0.015, y: y + 0.105, x2: x + 0.035, y2: y + 0.14 - 0.01 * walk, width: 0.008, color: '#6b3f1e' }); cmds.push({ op: 'line', x: x - 0.03, y: y + 0.0, x2: x - 0.06, y2: y - 0.02, width: 0.006, color: '#f3c7a6' }); cmds.push({ op: 'line', x: x + 0.03, y: y + 0.0, x2: x + 0.06, y2: y - 0.02, width: 0.006, color: '#f3c7a6' }); cmds.push({ op: 'ellipse', x: x - 0.014, y: y - 0.004, rx: 0.0045, ry: 0.0045, fill: '#1b1b1b' }); cmds.push({ op: 'ellipse', x: x + 0.014, y: y - 0.004, rx: 0.0045, ry: 0.0045, fill: '#1b1b1b' }); cmds.push({ op: 'line', x: x - 0.008, y: y + 0.012, x2: x + 0.008, y2: y + 0.012, width: 0.003, color: '#8b4b2e' }); } return cmds; } })",
+  "parameters": [
+    {
+      "key": "walkSpeed",
+      "label": "Walk speed",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "default": 1
+    },
+    {
+      "key": "cloverCount",
+      "label": "Clover count",
+      "min": 0,
+      "max": 24,
+      "step": 1,
+      "default": 10
+    }
+  ],
+  "tests": [
+    {
+      "name": "defaults render",
+      "steps": [
+        {
+          "dt": 0.1
+        }
+      ],
+      "assertions": [
+        {
+          "path": "cloverCount",
+          "op": "eq",
+          "value": 10
+        },
+        {
+          "path": "leprechauns.length",
+          "op": "eq",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "parameter override",
+      "steps": [
+        {
+          "dt": 0.1
+        }
+      ],
+      "assertions": [
+        {
+          "path": "walkSpeed",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "cloverCount",
+          "op": "eq",
+          "value": 10
+        }
+      ]
+    }
+  ]
+}

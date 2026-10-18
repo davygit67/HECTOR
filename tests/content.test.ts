@@ -20,6 +20,7 @@ test('v2 migration preserves existing spatial state, timer deadline, and manual 
 });
 test('registry defaults create and round-trip all kinds without invented runtime state', () => {
   for (const entry of CONTENT_REGISTRY) {
+    if (entry.kind === 'program') { assert.throws(() => defaultSpec('program'), /create and test/); continue; }
     if (entry.kind === 'youtube') { assert.throws(() => defaultSpec('youtube'), /Provide a YouTube/); continue; }
     if (entry.kind === 'media') { assert.throws(() => defaultSpec('media'), /Import a local media/); continue; }
     const s = create(initialScene(0), entry.kind);

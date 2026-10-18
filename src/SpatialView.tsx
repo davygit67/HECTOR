@@ -1,3 +1,4 @@
+import { programRevision } from './programRuntime';
 import { measuredMaskPath } from './shared/measured';
 import { layerOpacity, layerVisible, renderWidth, surfaceLayers } from './shared/layers';
 import { localMediaSource } from './localMedia';
@@ -40,7 +41,7 @@ export function getArtwork(scene: Scene, surface: Surface, now: number, withTime
   const content = scene.contents.filter(c => c.surfaceId === surface.id);
   const art = content.find(c => c.kind === 'art' && layerVisible(c));
   const activity = surfaceFrameKey(scene, surface.id, now, withTimers, backgroundOnly, {
-    media: mediaRevision, local: id => localMediaSource(id)?.revision ?? 0,
+    program: programRevision, media: mediaRevision, local: id => localMediaSource(id)?.revision ?? 0,
     light: id => ({ revision: backlightRevision(id), alpha: readBacklight(id, now)?.alpha ?? 0 }),
   });
   const stamp = `${artworkSceneKey(scene, withTimers)}:${activity}`;

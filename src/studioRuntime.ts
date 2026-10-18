@@ -1,3 +1,5 @@
+import { programWorkshop } from './programWorkshop';
+import { programStatuses } from './programRuntime';
 import { agentBatch, bridge } from './bridge';
 import { roomId, recordAdjustment } from './manualEvents';
 import { compositionCommands, makeComposition, type Composition } from './shared/studioScene';
@@ -46,6 +48,7 @@ async function inspect(): Promise<StudioSnapshot> {
       return [{ contentId: c.id, source: 'local-' + c.config.mediaType, ready: source?.ready ?? false, frameReady: source?.ready ?? false, status: source?.error || (source?.ready ? 'Ready' : 'Loading stored asset'), playing: video ? !video.paused : false, muted: video?.muted ?? true, currentTime: video?.currentTime ?? 0, duration: c.config.duration }];
     }),
     assets: [...scene.contents, ...scene.timers].map(c => ({ id: c.id, title: c.title, kind: 'kind' in c ? c.kind : 'timer', surfaceId: c.surfaceId })),
+    programs: programStatuses(),
     compositions: await listCompositions(), hardware: hardware?.status() ?? unavailableHardware,
     capabilities: { sceneBatch: !!agentBatch, observation: true, nativeMedia: !!window.projectionMedia, nativeOutput: !!window.projection, fileImportRequiresClick: true, physicalObservation: false },
   };
@@ -59,6 +62,7 @@ export async function executeStudio(operation: StudioOperation, actor: 'user' | 
   };
   try {
     if (!operation || typeof operation !== 'object' || JSON.stringify(operation).length > 200000) throw new Error('Invalid Studio operation.');
+    if (operation.type.startsWith('program.')) return programWorkshop.execute(operation as import('./shared/program').ProgramOperation);
     switch (operation.type) {
       case 'ui.navigate':
         if (!ui || !['studio', 'hardware'].includes(operation.page) || operation.view && !['room', 'arrange', 'align'].includes(operation.view)

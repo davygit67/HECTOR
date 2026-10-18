@@ -1,3 +1,4 @@
+import { ProgramControls } from './ProgramControls';
 import { BACKLIGHT_DEFAULTS, BACKLIGHT_LIMITS, BACKLIGHT_TONE_PROFILES, BACKLIGHT_TONE_LABELS, type BacklightToneProfile, type BacklightSettings } from './shared/backlight';
 import { useEffect, useState } from 'react';
 import type { Command, Scene } from './shared/domain';
@@ -12,7 +13,7 @@ export function ContentLibrary({ onCreate, disabled, hasArtwork = false }: { has
   return <div className="content-library" aria-label="Add content">
     <button disabled={disabled} onClick={() => onCreate('timer')} title="Add a countdown timer"><span>◷</span><strong>Timer</strong></button>
     {CONTENT_REGISTRY.map(entry => <button key={entry.kind} disabled={disabled && !(entry.kind === 'art' && hasArtwork)} onClick={() => onCreate(entry.kind)} title={entry.description}>
-      <span>{entry.symbol}</span><strong>{entry.label}</strong>
+      <span>{entry.symbol}</span><strong>{entry.kind === 'program' ? 'Create with AI' : entry.label}</strong>
     </button>)}
   </div>;
 }
@@ -23,7 +24,7 @@ export function ContentControls({ content, scene, send, onPlay }: { content: Con
   const dirty = name !== content.title || JSON.stringify(spec.config) !== configKey;
   const setConfig = (patch: Record<string, unknown>) => setSpec(s => ({ ...s, config: { ...s.config, ...patch } }) as ContentSpec);
   const entry = CONTENT_REGISTRY.find(e => e.kind === content.kind)!;
-  const actions = content.kind === 'media' ? [] : entry.actions as readonly string[];
+  const actions = content.kind === 'media' || content.kind === 'program' ? [] : entry.actions as readonly string[];
   const control = (action: 'start' | 'pause' | 'reset' | 'next' | 'previous') => send({ type: 'content.action', id: content.id, action });
   const move = (key: keyof Bounds, percent: number) => send({ type: 'content.move', id: content.id, bounds: { ...content.bounds, [key]: percent / 100 } });
   return <>
@@ -58,6 +59,7 @@ export function ContentControls({ content, scene, send, onPlay }: { content: Con
       <NumberField label="Game seed" value={spec.config.seed} min={CONTENT_LIMITS.seed.min} max={CONTENT_LIMITS.seed.max} onCommit={n => setConfig({ seed: n })} disabled={content.kind === 'game' && content.state.status !== 'idle'} />
     </>}
     <button className="primary full-width" disabled={!dirty} onClick={() => send({ type: 'content.update', id: content.id, title: name, ...(JSON.stringify(spec.config) !== configKey ? { spec } : {}) })}>{dirty ? 'Apply changes' : 'Changes saved'}</button>
+    {content.kind === 'program' && <ProgramControls content={content} send={send} onPlay={onPlay} />}
     {content.kind === 'media' && <><div className="divider" /><MediaControls content={content} send={send} /></>}
     {actions.length > 0 && <><div className="divider" /><span className="eyebrow">PLAYBACK & STATE</span></>}
     {content.kind === 'recipe' && <>

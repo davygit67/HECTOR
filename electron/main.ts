@@ -1,3 +1,5 @@
+import { validateProgramDefinition, PROGRAM_LIMITS, type ProgramArtifact } from '../src/shared/program.js';
+import { createHash } from 'node:crypto';
 import { MediaSources } from './media-sources.js';
 import { app, BrowserWindow, ipcMain, Menu, screen, type IpcMainInvokeEvent } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -139,6 +141,21 @@ else {
     ipcMain.handle('assets:store', (event, path, mimeType) => { authorizeChat(event); return localAssets.store(path, mimeType); });
     ipcMain.handle('assets:resolve', (event, id) => { authorize(event); return localAssets.url(id); });
     ipcMain.handle('assets:remove', (event, id) => { authorizeChat(event); return localAssets.remove(id); });
+    const programsFile = join(dataDir, 'programs.json'), progressFile = join(dataDir, 'program-progress.json');
+    ipcMain.handle('programs:read', event => { authorize(event); return existsSync(programsFile) ? JSON.parse(readFileSync(programsFile, 'utf8')) : []; });
+    ipcMain.handle('programs:put', (event, artifact: ProgramArtifact) => {
+      authorizeChat(event); validateProgramDefinition(artifact?.definition);
+      if (JSON.stringify(artifact).length > 650000 || !artifact.report?.passed || artifact.id !== createHash('sha256').update(JSON.stringify(artifact.definition)).digest('hex')) throw new Error('Invalid tested program artifact.');
+      const entries: ProgramArtifact[] = existsSync(programsFile) ? JSON.parse(readFileSync(programsFile, 'utf8')) : [];
+      if (entries.some(a => a.id === artifact.id)) return;
+      if (entries.length >= PROGRAM_LIMITS.artifacts) throw new Error('Program library is full (30 versions).');
+      writeFileSync(programsFile + '.tmp', JSON.stringify([...entries, artifact]), { encoding: 'utf8', mode: 0o600 }); renameSync(programsFile + '.tmp', programsFile);
+    });
+    ipcMain.handle('programs:state:read', event => { authorizeChat(event); return existsSync(progressFile) ? readFileSync(progressFile, 'utf8') : null; });
+    ipcMain.handle('programs:state:write', (event, value: unknown) => {
+      authorizeChat(event); if (typeof value !== 'string' || value.length > 2400000) throw new Error('Program progress storage limit exceeded.');
+      JSON.parse(value); writeFileSync(progressFile + '.tmp', value, { encoding: 'utf8', mode: 0o600 }); renameSync(progressFile + '.tmp', progressFile);
+    });
     const libraryFile = join(dataDir, 'compositions.json');
     ipcMain.handle('library:read', event => { authorizeChat(event); return existsSync(libraryFile) ? JSON.parse(readFileSync(libraryFile, 'utf8')) : []; });
     ipcMain.handle('library:write', (event, items: unknown) => {

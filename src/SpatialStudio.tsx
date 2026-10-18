@@ -1,3 +1,4 @@
+import { configurePrograms } from './programRuntime';
 import { configureMedia } from './nativeMedia';
 import { useEffect, useRef, useState } from 'react';
 import { bridge } from './bridge';
@@ -60,7 +61,7 @@ export function SpatialStudio() {
     return () => clearInterval(tick);
   }, [timers]);
   useEffect(() => {
-    if (snapshot) { configureMedia(snapshot.scene); configureLocalMedia(snapshot.scene); }
+    if (snapshot) { configureMedia(snapshot.scene); configureLocalMedia(snapshot.scene); configurePrograms(snapshot.scene, !clean); }
   }, [snapshot?.scene]);
   useEffect(() => {
     const scene = snapshot?.scene;
@@ -96,6 +97,7 @@ export function SpatialStudio() {
       const existing = surfaceContents.find(c => c.kind === 'art');
       if (existing) { setError(null); void send({ type: 'content.select', id: existing.id }); setMode('arrange'); setInspector('content'); return; }
     }
+    if (kind === 'program') { setInspector('assistant'); return; }
     if (kind === 'youtube') { setYoutubeDraft(''); setYoutubeError(''); return; }
     if (kind === 'media') { mediaInput.current?.click(); return; }
     const id = crypto.randomUUID();
@@ -149,7 +151,7 @@ export function SpatialStudio() {
             {coverage && <div className="coverage-legend"><span><i className="a" />A</span><span><i className="b" />B</span><span><i className="overlap" />Overlap</span><span><i className="none" />Uncovered</span></div>}
           </div> : null}
           <div className={'stage-surround ' + (mode === 'room' ? 'player-controls-only' : '')}><Stage alignmentSession="studio" scene={scene} now={now} mode={mode === 'align' ? 'align' : 'arrange'} active={mode !== 'room'} send={send} playing={playing} /></div>
-          {mode === 'arrange' && surfaceContents.some(c => c.kind === 'game' || c.kind === 'youtube') && <div className="interaction-strip"><span>{playing ? 'Interact mode · use the player controls or game targets.' : 'Arrange mode · drag panels to place them.'}</span><button className="secondary" onClick={() => setPlaying(p => !p)}>{playing ? 'Arrange panels' : 'Interact with content'}</button></div>}
+          {mode === 'arrange' && surfaceContents.some(c => c.kind === 'game' || c.kind === 'youtube' || c.kind === 'program') && <div className="interaction-strip"><span>{playing ? 'Interact mode · use the player controls or game targets.' : 'Arrange mode · drag panels to place them.'}</span><button className="secondary" onClick={() => setPlaying(p => !p)}>{playing ? 'Arrange panels' : 'Interact with content'}</button></div>}
           {scene.contents.some(c => c.kind === 'youtube') && (mode === 'room' || mode === 'arrange' && !playing) && <div className="interaction-strip"><span>{window.projectionMedia ? 'Video and backlight share one source across every view.' : 'YouTube is shown as a placement preview here.'}</span><button className="secondary" onClick={() => {
             const video = scene.contents.find(c => c.kind === 'youtube' && c.surfaceId === surface.id) ?? scene.contents.find(c => c.kind === 'youtube');
             if (video) { send({ type: 'surface.select', id: video.surfaceId }); send({ type: 'content.select', id: video.id }); setMode('arrange'); setPlaying(true); }

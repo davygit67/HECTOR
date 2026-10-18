@@ -1,3 +1,5 @@
+import { readProgram } from './programRuntime';
+import { paintProgramFrame } from './programPainter';
 import { paintMedia } from './mediaPainter';
 import { layerVisible, layerOpacity } from './shared/layers';
 import { readMediaImage, readMediaPicture } from './nativeMedia';
@@ -155,6 +157,7 @@ export function paintSceneBacklight(ctx:CanvasRenderingContext2D,scene:Scene,sur
   ctx.restore();
 }
 export function paintContent(ctx: CanvasRenderingContext2D, c: ContentInstance, w: number, h: number, now: number) {
+  if (c.kind === 'program') { const frame = readProgram(c.id)?.frame; if (frame) { ctx.save(); ctx.translate(c.bounds.x * w, c.bounds.y * h); paintProgramFrame(ctx, frame.commands, c.bounds.w * w, c.bounds.h * h); ctx.restore(); } return; }
   if (c.kind === 'media') { paintMedia(ctx, c, w, h); return; }
   if (c.kind === 'art') return;
   if (c.kind === 'youtube') {

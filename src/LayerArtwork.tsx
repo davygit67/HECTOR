@@ -1,3 +1,4 @@
+import { programRevision } from './programRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ContentInstance } from './shared/content';
 import type { Scene } from './shared/domain';
@@ -17,7 +18,7 @@ export function LayerArtwork({ content, scene, output, active }: { content: Cont
       const { content, active, signature } = latest.current;
       const presentation = document.querySelector('.projection-presentation:not([hidden])');
       if (active && !document.hidden && (!presentation || presentation.contains(canvas.current))) {
-        const stamp = signature + (content.kind === 'youtube' ? mediaRevision(content.id) : content.kind === 'media' ? localMediaSource(content.id)?.revision : '');
+        const stamp = signature + (content.kind === 'program' ? programRevision(content.id) : content.kind === 'youtube' ? mediaRevision(content.id) : content.kind === 'media' ? localMediaSource(content.id)?.revision : '');
         if (stamp !== last) {
           const ctx = canvas.current?.getContext('2d');
           if (ctx) { ctx.clearRect(0, 0, width, height); paintContent(ctx, content, width, height, Date.now()); last = stamp; }

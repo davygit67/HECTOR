@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+contextBridge.exposeInMainWorld('projectionPrograms', { read: () => ipcRenderer.invoke('programs:read'), put: value => ipcRenderer.invoke('programs:put', value) });
+contextBridge.exposeInMainWorld('projectionProgramState', { read: () => ipcRenderer.invoke('programs:state:read'), write: value => ipcRenderer.invoke('programs:state:write', value) });
 contextBridge.exposeInMainWorld('projectionLibrary', {
   read: () => ipcRenderer.invoke('library:read'),
   write: items => ipcRenderer.invoke('library:write', items),
