@@ -143,7 +143,7 @@ test('routine context retains measurement provenance but omits dense masks and s
     assert.equal(context.surfaces[0].measurement?.source, 'sensor');
     assert.equal(context.surfaces[0].measurement?.roomReferenceId, 'test-room');
     assert.doesNotMatch(JSON.stringify(context), /1111111111111111/);
-    assert.ok(context.capabilities.unavailable.includes('curved-object projection'));
+    assert.ok(context.capabilities.unavailable.includes('curved-object projection on this connection'));
   }
   const bound = await bindCanvasTurn(fixture.port, { turnId: 'object', signal: new AbortController().signal, prompt: 'Turn the Clorox wipes cylinder on the table red.' });
   const instructions = await bound.instructions();

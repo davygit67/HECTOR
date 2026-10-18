@@ -4,6 +4,10 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Selected curved object and slow movement — October 18, in progress
+
+Canvas owns 3D projector calibration, explicit RGB-click object selection, bounded observed-shape tracking and exclusive projector color masks with loss blanking. Agent implements compatible Studio actions/context/eligibility/feedback with 144 checks/build and five real OpenAI scenarios across isolated test runs; a discovered read-only completion-review bug was corrected and regression-tested. Shared contracts are agreed. No semantic recognition, hidden-face reconstruction, general 6DOF tracking or helper protocol change is claimed. No Git/publication/runtime actions during concurrent implementation; canvas integrated checks remain pending. The published flat-surface milestone below remains the current verified release.
+
 ## Fixed-rig room reference and recovery — October 18, published
 
 Canvas owns the saved temporal metric reference, current roomModel/validSurfaceIds, browser reconnect, reference-bound planar solving and dispatch-time eligibility. Agent owns scan-room/forget-room adapters, physical-fill/reference checks and helper process/source recovery. Both preserve the reference across dropout; new physical actions wait for fresh compatibility. Fixed mounting is not projector calibration, and this slice does not recognize or track curved objects. No PMF1 change.

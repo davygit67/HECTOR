@@ -18,7 +18,8 @@ const operation = z.union([
   z.strictObject({ type: z.literal('composition.save'), name: z.string().min(1).max(80) }),
   z.strictObject({ type: z.enum(['composition.recall', 'composition.remove']), id }),
   z.strictObject({ type: z.literal('hardware.action'), command: z.union([
-    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'map-table', 'solve-surfaces', 'cancel-capture', 'clear-pattern', 'scan-room', 'forget-room', 'import-session', 'download-session']) }),
+    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'map-table', 'solve-surfaces', 'cancel-capture', 'clear-pattern', 'scan-room', 'forget-room', 'calibrate-projector', 'stop-object', 'import-session', 'download-session']) }),
+    z.strictObject({ action: z.literal('fill-object'), objectId: id, color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable() }),
     z.strictObject({ action: z.literal('use-surface'), candidateId: id, kind: z.enum(['table', 'wall']) }),
     z.strictObject({ action: z.literal('record'), seconds: z.number().int().min(1).max(30).nullable() }),
     z.strictObject({ action: z.enum(['open-session', 'remove-session']), id }),
@@ -43,12 +44,12 @@ export function createStudioTools(host: SceneToolHost, studio: StudioPort, repor
   let observations = 0;
   return {
     inspect_studio: tool({
-      description: 'Read current interface view, source readiness/errors, available displays/assets/saved compositions and sensor state, including roomModel reference readiness and validSurfaceIds. Use before runtime operations. A saved reference or streaming sensor alone does not prove current mapping or physical projection.',
+      description: 'Read current interface view, source readiness/errors, available displays/assets/saved compositions and sensor state, including roomModel reference readiness, validSurfaceIds and objectMapping calibration/selected object/tracking/canFill. Object identity comes from the user camera click, not semantic recognition. Use before runtime operations. Saved calibration or a streaming sensor alone does not prove current mapping or physical projection.',
       strict: true, inputSchema: z.strictObject({}),
       execute: (input, options) => host.once('inspect_studio', input, options, () => studio.inspect()),
     }),
     operate_studio: tool({
-      description: 'Operate the interface: navigate inspectors/views; output window/fullscreen; video play/pause/seek/sound/retry/source window; import handoff; align/project; save/recall/remove compositions; hardware connect/record/replay/capture. Inspect IDs/status first. scan-room saves a stable metric reference from fresh registered frames; it does not calibrate the projector. forget-room removes that reference only on explicit user reset, never as automatic recovery. Retain references across disconnects; wait for roomModel ready/canMap after reconnect. map-table captures/solves a stationary physical tabletop with a verified room reference, live registered sensor and fullscreen output; solve-surfaces processes the selected completed capture; use-surface labels a candidate only after the user identifies it. No object/cylinder recognition or motion tracking. Inspect fresh mapping status after these actions; starting capture is not completion. Play starts muted; unmute only on user request. File selection, account sign-in and browser fullscreen may require a user click; report handoff without claiming completion. Recall preserves current geometry and pauses media.',
+      description: 'Operate the interface: navigation, output, media, import, alignment, compositions and hardware. Inspect IDs/status first. scan-room saves a metric reference, not projector calibration; forget-room is only for explicit user reset. Retain reference through disconnects and wait for ready/canMap. map-table calibrates a stationary plane; solve-surfaces solves a capture; use-surface requires user candidate selection. calibrate-projector projects full Gray patterns and estimates a session-only 3D fit from nonplanar geometry. For a curved object, the USER must click it in registered RGB; there is no agent selection/seed tool or semantic recognition. fill-object sets solid color on the current object ID only when tracking/canFill; null clears color and restores scene output. Active object color temporarily replaces normal projector output with a black-backed measured mask; existing scene is retained. stop-object clears identity/region/output and restores scene output. Loss/staleness keeps object output black until explicit clear/stop; no automatic reacquisition, fast/6DOF tracking or hidden-face rendering. Inspect after calibration; starting capture is not completion or physical proof. Play starts muted; unmute only on request. File/account/fullscreen/selection steps can require a user click: report handoff. Recall preserves geometry and pauses media.',
       strict: true, inputSchema: z.strictObject({ operation }),
       execute: (input, options) => host.once('operate_studio', input, options, async () => {
         let request: StudioOperation;
@@ -56,8 +57,27 @@ export function createStudioTools(host: SceneToolHost, studio: StudioPort, repor
           const { collapseAsset, ...settings } = input.operation;
           request = withoutNulls(settings) as Extract<StudioOperation, { type: 'ui.configure' }>;
           if (collapseAsset) request.expandedAssetId = null;
+        } else if (input.operation.type === 'hardware.action' && input.operation.command.action === 'fill-object') {
+          // Null is an explicit color-clear operation, not an omitted setting.
+          request = { type: 'hardware.action', command: input.operation.command };
         } else request = withoutNulls(input.operation) as StudioOperation;
-        const result = await studio.execute(request);
+        if (request.type === 'hardware.action' && request.command.action === 'fill-object' && request.command.color !== null) {
+          const current = await studio.inspect(), hardware = current.hardware, mapping = hardware.objectMapping;
+          const message = !mapping?.object || mapping.object.id !== request.command.objectId
+            ? 'Select the intended object by clicking it in the Hardware camera view, then inspect its current ID. The agent cannot recognize a named container or invent a target/seed.'
+            : hardware.mode !== 'live' || hardware.provenance !== 'sensor' || !hardware.canAcquire || hardware.busy || mapping.state !== 'tracking' || !mapping.canFill || !mapping.calibrationId
+              ? 'The selected object is not currently eligible for projection. Inspect calibration/tracking/output status; retain the scene and do not substitute a table fill or reuse a lost target. Re-selection after loss requires a user click.' : undefined;
+          if (message) {
+            const result = { ok: false, outcome: 'failed' as const, message, sceneRevision: current.sceneRevision, physicallyVerified: false };
+            report(`Could not apply: ${message}`); return result;
+          }
+        }
+        const accepted = await studio.execute(request);
+        const objectAction = request.type === 'hardware.action' && ['calibrate-projector', 'fill-object', 'stop-object'].includes(request.command.action);
+        const note = accepted.ok && accepted.outcome === 'applied' && request.type === 'hardware.action'
+          ? request.command.action === 'calibrate-projector' ? ' This is a calibration estimate; physical alignment is not verified.'
+            : request.command.action === 'fill-object' && request.command.color !== null ? ' Object mode temporarily replaces normal projector output while preserving the scene. Tracking can be lost; physical color and alignment are not verified.' : '' : '';
+        const result = { ...accepted, message: `${accepted.message}${note}`, ...(objectAction ? { physicallyVerified: false } : {}) };
         report(`${result.outcome === 'handoff' ? 'Your action is needed: ' : !result.ok ? 'Could not apply: ' : ''}${result.message}`);
         return result;
       }),

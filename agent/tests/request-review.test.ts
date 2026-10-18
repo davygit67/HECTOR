@@ -157,6 +157,30 @@ test('a missing or invalid review never turns partial success into overall compl
   assert.equal(f.scene().timers.length, 0);
 });
 
+test('invalid completion after only inspection remains incomplete even if the model stops without acting', async () => {
+  const fixture = canvasFixture();
+  let step = 0;
+  const model = new RawMockLanguageModelV4({ doGenerate: async call => {
+    if (++step === 1) return toolReply('inspect_room', {}, 'read-only');
+    if (step === 2 || call.toolChoice?.type === 'tool') return review([done('color', 'Make the selected object green', ['read-only'])], `invalid-${step}`);
+    return textReply('Everything is complete.');
+  } });
+  const result = await createProjectionAgent({ canvas: fixture.port, model, maxSteps: 3 }).send('Make the selected object green.');
+  assert.equal(result.status, 'incomplete'); assert.deepEqual(fixture.commands, []);
+  assert.match(result.text, /not been confirmed complete/); assert.doesNotMatch(result.text, /Everything is complete/);
+});
+
+test('a rejected read-only review gets another bounded review and preserves the required selection handoff', async () => {
+  const fixture = canvasFixture();
+  const model = new RawMockLanguageModelV4({ doGenerate: [toolReply('inspect_room', {}, 'read-only'),
+    review([done('color', 'Make the selected object green', ['read-only'])], 'invalid'), textReply('Done'),
+    review([{ id: 'color', request: 'Make the selected object green', status: 'awaiting_user', evidence: [], reason: 'Tracking is lost. Click the intended object again before changing its color.' }], 'corrected')] });
+  const result = await createProjectionAgent({ canvas: fixture.port, model, maxSteps: 5 }).send('Make the selected object green.');
+  assert.equal(result.status, 'incomplete'); assert.equal(result.steps, 4); assert.deepEqual(fixture.commands, []);
+  assert.deepEqual(model.doGenerateCalls[3].toolChoice, { type: 'tool', toolName: 'review_request' });
+  assert.match(result.text, /Needs your input.*Tracking is lost/);
+});
+
 test('new actions invalidate prior reviews, and a final pending review retains receipts in follow-up history', async () => {
   const f = canvasFixture();
   const model = new RawMockLanguageModelV4({ doGenerate: [toolReply('create_note', note, 'note'),

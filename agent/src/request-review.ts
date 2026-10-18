@@ -39,6 +39,9 @@ export function createRequestReview(prompt: string) {
     recordStep({ calls, results }) {
       // A later action invalidates an earlier review. Read-only checks do not.
       for (const c of calls) {
+        // A rejected review still needs resolution, including when inspection
+        // found a missing/lost target and no mutation was attempted.
+        if (c.toolName === 'review_request') attempted = true;
         const memoryRead = c.toolName === 'manage_memory' && (c.input as { action?: string } | null)?.action === 'list';
         if (!readOnly.has(c.toolName) && !memoryRead) { actionIds.add(c.toolCallId); attempted = true; reviewed = false; }
       }

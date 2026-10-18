@@ -20,6 +20,7 @@ export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSe
       youtubeSearch, contentLimits: capabilities.contentLimits,
       contentRegistry: capabilities.contentRegistry.map(c => ({ kind: c.kind, description: c.description, actions: c.actions })),
       localMedia: capabilities.localMedia, layerAndDisplayControls: capabilities.layerAndDisplayControls, surfaceFill: capabilities.surfaceFill,
+      objectProjection: capabilities.objectProjection,
       generatedPrograms: capabilities.generatedPrograms,
       videoBacklight: media ? capabilities.videoBacklight : undefined,
       unavailable: capabilities.unavailable,
