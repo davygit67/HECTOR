@@ -1,6 +1,6 @@
 # Canvas task status
 
-## Curved object and slow movement — verified, publishing October 18
+## Curved object and slow movement — published October 18
 
 Implemented in Hardware setup → Follow one object: full 3D pinhole projector fit from nonplanar Gray-code XYZ correspondences, independent held-out/coverage/volume checks, explicit camera-image click selection above a measured table, connected observed-shape tracking, live metric points in the shared room and direct projector-space occlusion/inset mask. One selected object can receive a solid color and follow slow translation inside a fixed region; distributed background remains a rig witness. No semantic recognition, hidden faces, textured curved video, six-degree-of-freedom pose or fast motion. Fit/selection are session-only. CURVED_OBJECTS_V1.md gives the integrated Windows setup and physical qualification procedure.
 
@@ -8,7 +8,7 @@ Tracking uses a bounded worker with one job in flight, current native helper clo
 
 Validation:224root tests and production/desktop typecheck/build pass; peer reports144agent tests/typecheck/build and five real OpenAI isolated scenarios. Browser analytic fixtures exercised real workers, rendered pixels, slow movement, loss, expiry, scene restoration and actual fullscreen. The earlier full object sequence passed16assertions with the native-like250msclock uncertainty; final blackout additions passed15assertions through explicit clear, then the in-app browser left fullscreen before the second-selection/stall phase, which was correctly rejected (room still ready, viewport changed). Do not represent that final18-check run as fully passing. The integrated40pattern Hardware/action/click/output fixture passed9assertions using explicitly simulated fullscreen status on isolated5175; actual fullscreen loss also correctly aborted capture. No physical Kinect, Windows USB or optical alignment has been qualified. No live user scene/media was edited, no forced host/player restart, no dependencies added. Inspected Microsoft RoomAlive and PCL precedents; original code, no upstream engine vendored.
 
-Clean guarded sync preceded edits. Agent source is committed/frozen; canvas is reviewing and publishing only explicit owned paths, then pushing both completed commits. The isolated test server/tabs are being closed. Normal idle/clean synchronization resumes after publication; preserve the live5173Studio/media host.
+Clean guarded sync preceded edits. Agent d1f47eb and canvas beb5a65 are published together on GitHub main after explicit owned-path review and repository checks. The isolated5175test server and temporary browser tabs are closed. Normal idle/clean synchronization resumes after the final owner status notes; preserve the live5173Studio/media host.
 
 ## Fixed-rig Kinect room integration — published October 18
 
