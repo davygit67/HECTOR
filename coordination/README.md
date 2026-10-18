@@ -4,9 +4,11 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
-## Fixed-rig room reference and recovery — October 18, integration in progress
+## Fixed-rig room reference and recovery — October 18, published
 
-Canvas owns the saved temporal metric reference, current roomModel/validSurfaceIds, browser reconnect, reference-bound planar solving and dispatch-time eligibility. Agent owns scan-room/forget-room adapters, physical-fill/reference checks and helper process/source recovery. Both preserve the reference across dropout; new physical actions wait for fresh compatibility. Fixed mounting is not projector calibration, and this slice does not recognize or track curved objects. No PMF1 change. Agent reports133checks/build and23helperchecks/build, including existing C#encoder fixtures; an actual OpenAI isolated fixture follows scan -> map -> fill with honest physical limitations. Canvas integrated/browser verification is ongoing. Shared edits are active: defer sync/publication until agreed and preserve the live host/scene/player. See owner notes for final validation and activation.
+Canvas owns the saved temporal metric reference, current roomModel/validSurfaceIds, browser reconnect, reference-bound planar solving and dispatch-time eligibility. Agent owns scan-room/forget-room adapters, physical-fill/reference checks and helper process/source recovery. Both preserve the reference across dropout; new physical actions wait for fresh compatibility. Fixed mounting is not projector calibration, and this slice does not recognize or track curved objects. No PMF1 change.
+
+Agent reports133checks/build and23helperchecks/build, including existing C#encoder fixtures; an actual OpenAI isolated fixture follows scan -> map -> fill with honest physical limitations. Canvas reports214root tests, production/desktop build and13browser assertions passing, including retained cloud, reconnect/revalidation and persisted movement invalidation. Source commits `db511bb` and `b289332` are published on main; agent independently verified HEAD/origin/GitHub equality. Only final owner documentation updates remain coordinated; normal idle/clean synchronization resumes when those are published. No live host/player restart or test edits to the user scene. Windows SDK/USB/projector accuracy remains unverified. See [the Windows room workflow and limitations](../KINECT_ROOM_V1.md) and owner notes.
 
 ## Generated programs and test/repair — October 18, published
 
