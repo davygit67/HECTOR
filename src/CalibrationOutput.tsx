@@ -9,7 +9,7 @@ export function PatternOutput({ children }: { children: ReactNode }) {
     const outputId = crypto.randomUUID(), channel = new BroadcastChannel(PATTERN_CHANNEL);
     let ownerId: string | null = null, patternId: string | null = null, leaseUntil = 0, generation = 0, disposed = false;
     const metrics = () => ({ width: innerWidth, height: innerHeight, devicePixelRatio });
-    const status = () => { if (!disposed) channel.postMessage({ type: 'status', outputId, visible: document.visibilityState === 'visible', activeOwner: ownerId, patternId, ...metrics() }); };
+    const status = () => { if (!disposed) channel.postMessage({ type: 'status', outputId, visible: document.visibilityState === 'visible', activeOwner: ownerId, patternId, fullscreen: !!document.fullscreenElement, ...metrics() }); };
     const clear = () => { generation++; ownerId = null; patternId = null; leaseUntil = 0; setPattern(null); status(); };
     const geometryChanged = () => { clear(); status(); };
     const afterPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -35,7 +35,7 @@ export function PatternOutput({ children }: { children: ReactNode }) {
         if (current !== generation || document.visibilityState !== 'visible' || JSON.stringify(before) !== JSON.stringify(metrics())) { fail('The output changed while presenting the pattern.'); return; }
         const rect = canvas.current.getBoundingClientRect();
         status(); channel.postMessage({ type: 'presented', outputId, ownerId, requestId: data.requestId,
-          presentation: { patternId: data.pattern.id, presentedAtMs: Date.now(), outputId, mode: 'output-window', viewport: before, rasterRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } });
+          presentation: { patternId: data.pattern.id, presentedAtMs: Date.now(), outputId, mode: 'output-window', fullscreen: !!document.fullscreenElement, viewport: before, rasterRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } });
       } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
     };
     const timer = setInterval(() => { if (ownerId && Date.now() > leaseUntil) clear(); status(); }, 750);

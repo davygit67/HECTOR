@@ -18,7 +18,7 @@ export const CHAT_MESSAGE_LIMIT = 8000;
 export const CHAT_COMMAND_TYPES = ['timer.create', 'timer.action', 'timer.remove', 'timer.attach',
   'content.create', 'content.update', 'content.action', 'content.attach', 'content.remove', 'grid.set', 'youtube.backlight', 'youtube.backlight.configure',
   'timer.select', 'timer.update', 'timer.move', 'content.select', 'content.move', 'media.seek', 'layer.configure', 'layer.reorder', 'display.configure',
-  'calibration.set', 'calibration.reset', 'manual.target', 'surface.select', 'surface.move', 'surface.demo-exclusion', 'projector.update', 'viewer.update', 'output.view'] as const;
+  'calibration.set', 'calibration.reset', 'manual.target', 'surface.select', 'surface.fill', 'surface.move', 'surface.demo-exclusion', 'projector.update', 'viewer.update', 'output.view'] as const;
 export function isChatCommand(value: unknown): value is Command {
   if (!value || typeof value !== 'object') return false;
   return (CHAT_COMMAND_TYPES as readonly unknown[]).includes((value as { type?: unknown }).type);

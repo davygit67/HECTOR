@@ -6,6 +6,8 @@ export interface CameraIntrinsics extends ImageSize { fx: number; fy: number; cx
 export interface SensorDevice {
   id: string; label: string; kind: 'synthetic' | 'kinect-v2' | 'rgbd';
   color: ImageSize; depth: ImageSize; depthScaleMeters: number;
+  /** Registered RGB shares the depth pixel grid; absent for legacy raw RGB. */
+  colorRegistration?: 'depth';
   colorIntrinsics: CameraIntrinsics | null; depthIntrinsics: CameraIntrinsics | null;
   /** Row-major, meters: colorPoint = depthToColor * depthPoint. Null means unknown. */
   depthToColor: number[] | null;
@@ -20,6 +22,10 @@ export interface SensorFrame {
   clockUncertaintyMs: number;
   color: Uint8Array; // tightly packed RGB8, top-left origin
   depth: Uint16Array; // row-major; zero is invalid; raw * depthScaleMeters = meters
+  /** SDK camera meters, XYZ per depth pixel. Zero triple means invalid. */
+  cameraPoints?: Float32Array;
+  /** Optional measured SDK floor equation n·P + d = 0, normal pointing up. */
+  floorPlane?: [number, number, number, number];
 }
 export interface PatternPresentation {
   patternId: string; presentedAtMs: number; outputId: string;
@@ -27,6 +33,7 @@ export interface PatternPresentation {
   viewport: { width: number; height: number; devicePixelRatio: number };
   /** Actual displayed raster rectangle in CSS pixels, relative to the output viewport. */
   rasterRect: { x: number; y: number; width: number; height: number };
+  fullscreen?: boolean;
 }
 export interface CaptureAssociation {
   frameIndex: number; pattern: CalibrationPattern; presentation: PatternPresentation;
@@ -54,6 +61,7 @@ function intrinsics(value: unknown, dimensions: ImageSize): boolean {
 export function validateDevice(value: unknown): asserts value is SensorDevice {
   if (!object(value) || typeof value.id !== 'string' || !value.id || value.id.length > 128 || typeof value.label !== 'string' || value.label.length > 128 ||
     !['synthetic', 'kinect-v2', 'rgbd'].includes(String(value.kind)) || !size(value.color) || !size(value.depth) || !finite(value.depthScaleMeters, .000001, 1) ||
+    !(value.colorRegistration === undefined || value.colorRegistration === 'depth' && value.color.width === value.depth.width && value.color.height === value.depth.height) ||
     !intrinsics(value.colorIntrinsics, value.color) || !intrinsics(value.depthIntrinsics, value.depth) ||
     !(value.depthToColor === null || Array.isArray(value.depthToColor) && value.depthToColor.length === 16 && value.depthToColor.every(n => finite(n, -10000, 10000)) &&
       value.depthToColor[12] === 0 && value.depthToColor[13] === 0 && value.depthToColor[14] === 0 && value.depthToColor[15] === 1)) {
@@ -66,9 +74,11 @@ export function validateFrame(frame: SensorFrame) {
     !(frame.color instanceof Uint8Array) || !(frame.depth instanceof Uint16Array) ||
     frame.color.length !== frame.device.color.width * frame.device.color.height * 3 || frame.depth.length !== frame.device.depth.width * frame.device.depth.height ||
     frameBytes(frame) > SENSOR_LIMITS.maxFrameBytes) throw new Error('Invalid RGB/depth frame.');
+  if (frame.cameraPoints !== undefined && (!(frame.cameraPoints instanceof Float32Array) || frame.cameraPoints.length !== frame.depth.length * 3 || !frame.cameraPoints.every(n => Number.isFinite(n) && Math.abs(n) <= 100))) throw new Error('Invalid registered camera points.');
+  if (frame.floorPlane !== undefined && (!Array.isArray(frame.floorPlane) || frame.floorPlane.length !== 4 || !frame.floorPlane.every(n => Number.isFinite(n) && Math.abs(n) <= 100) || Math.abs(Math.hypot(...frame.floorPlane.slice(0, 3)) - 1) > .001)) throw new Error('Invalid measured floor plane.');
 }
-export function frameBytes(frame: SensorFrame) { return frame.color.byteLength + frame.depth.byteLength; }
-export function copyFrame(frame: SensorFrame): SensorFrame { return { ...frame, device: structuredClone(frame.device), color: frame.color.slice(), depth: frame.depth.slice() }; }
+export function frameBytes(frame: SensorFrame) { return frame.color.byteLength + frame.depth.byteLength + (frame.cameraPoints?.byteLength ?? 0); }
+export function copyFrame(frame: SensorFrame): SensorFrame { return { ...frame, device: structuredClone(frame.device), color: frame.color.slice(), depth: frame.depth.slice(), ...(frame.cameraPoints ? { cameraPoints: frame.cameraPoints.slice() } : {}), ...(frame.floorPlane ? { floorPlane: [...frame.floorPlane] as [number,number,number,number] } : {}) }; }
 export function sessionBytes(session: SensorSession) { return session.frames.reduce((sum, frame) => sum + frameBytes(frame), 0); }
 export function canAppendFrame(frames: SensorFrame[], frame: SensorFrame) {
   return frames.length < SENSOR_LIMITS.maxFrames && frames.reduce((sum, f) => sum + frameBytes(f), 0) + frameBytes(frame) <= SENSOR_LIMITS.maxSessionBytes;
@@ -94,20 +104,25 @@ function header(bytes: Uint8Array, magic: string) {
 }
 export function encodeSensorFrame(frame: SensorFrame): Uint8Array {
   validateFrame(frame);
-  const { color, depth, ...meta } = frame;
+  const { color, depth, cameraPoints, ...meta } = frame;
   const depthBytes = new Uint8Array(depth.length * 2), view = new DataView(depthBytes.buffer);
   for (let i = 0; i < depth.length; i++) view.setUint16(i * 2, depth[i], true);
-  return envelope('PMF1', meta, [color, depthBytes]);
+  const points = new Uint8Array((cameraPoints?.length ?? 0) * 4), pointView = new DataView(points.buffer);
+  cameraPoints?.forEach((n, i) => pointView.setFloat32(i * 4, n, true));
+  return envelope('PMF1', { ...meta, ...(cameraPoints ? { cameraPointsFormat: 'xyz-f32-le' } : {}) }, [color, depthBytes, points]);
 }
 export function decodeSensorFrame(bytes: Uint8Array): SensorFrame {
   if (bytes.length > SENSOR_LIMITS.maxFrameBytes + SENSOR_LIMITS.maxHeaderBytes) throw new Error('Sensor frame exceeds the size limit.');
   const { value, offset } = header(bytes, 'PMF1');
   validateDevice(value.device);
   const colorLength = value.device.color.width * value.device.color.height * 3, depthLength = value.device.depth.width * value.device.depth.height;
-  if (bytes.length - offset !== colorLength + depthLength * 2) throw new Error('Incomplete or oversized sensor frame.');
+  if (value.cameraPointsFormat !== undefined && value.cameraPointsFormat !== 'xyz-f32-le') throw new Error('Unknown camera-point encoding.');
+  const cameraPoints = value.cameraPointsFormat ? new Float32Array(depthLength * 3) : undefined;
+  if (bytes.length - offset !== colorLength + depthLength * 2 + (cameraPoints?.byteLength ?? 0)) throw new Error('Incomplete or oversized sensor frame.');
   const depth = new Uint16Array(depthLength), view = new DataView(bytes.buffer, bytes.byteOffset + offset + colorLength, depthLength * 2);
   for (let i = 0; i < depthLength; i++) depth[i] = view.getUint16(i * 2, true);
-  const result: SensorFrame = { device: value.device, sequence: value.sequence as number, capturedAtMs: value.capturedAtMs as number, exposureMs: value.exposureMs === undefined ? null : value.exposureMs as number | null, clockUncertaintyMs: value.clockUncertaintyMs as number,
+  if (cameraPoints) { const pv = new DataView(bytes.buffer, bytes.byteOffset + offset + colorLength + depthLength * 2, cameraPoints.byteLength); for (let i = 0; i < cameraPoints.length; i++) cameraPoints[i] = pv.getFloat32(i * 4, true); }
+  const result: SensorFrame = { ...(cameraPoints ? { cameraPoints } : {}), ...(value.floorPlane !== undefined ? { floorPlane: value.floorPlane as SensorFrame['floorPlane'] } : {}), device: value.device, sequence: value.sequence as number, capturedAtMs: value.capturedAtMs as number, exposureMs: value.exposureMs === undefined ? null : value.exposureMs as number | null, clockUncertaintyMs: value.clockUncertaintyMs as number,
     color: bytes.slice(offset, offset + colorLength), depth };
   validateFrame(result); return result;
 }

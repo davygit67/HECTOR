@@ -83,3 +83,11 @@ The production build and 122 automated app tests pass. The local `tests/pattern-
 - [Microsoft RoomAlive calibration workflow](https://github.com/microsoft/RoomAliveToolkit/blob/master/ProCamCalibration/README.md): separate observation acquisition, offline solve and inspection.
 - [OpenCV GrayCodePattern](https://docs.opencv.org/4.x/d1/dec/classcv_1_1structured__light_1_1GrayCodePattern.html): existing generation/decoding primitives to evaluate when implementing the solver.
 - [libfreenect2](https://github.com/OpenKinect/libfreenect2): candidate RGB/depth driver; exact Mac/USB compatibility is still unverified.
+
+## Registered geometry and planar solve (October 17)
+
+PMF1 optionally declares `device.colorRegistration: "depth"`, requiring color/depth dimensions to match. If header `cameraPointsFormat` is `"xyz-f32-le"`, append exactly `depthWidth * depthHeight * 3` little-endian float32 values after the existing RGB and uint16 depth data. They are SDK camera-space XYZ meters; zero triples mean missing geometry. Header `floorPlane` may contain a fresh normalized four-coefficient SDK floor equation. Legacy frames have no appended geometry and remain readable. Copying, recording, size accounting and replay preserve these additions.
+
+The full complementary Gray sequence is decoded only where every bit has sufficient measured contrast. The worker fits depth planes, connected patches and robust plane-to-projector homographies. It retains an observed 96×96 coverage mask with a one-cell inset, rather than filling a convex hull over occluders. Imported surface evidence includes source/session/sensor identity, fit residual, dimensions, viewport, saved quad, coverage and a sparse depth witness. Synthetic fixtures never become physical measurements. Canonical `surface.measure` is not a model command; `surface.fill` uses the already imported surface. The agent receives fresh sensor identity and currently valid measured surface IDs, not raw image arrays.
+
+A low reprojection residual is an internal consistency check, not physical optical accuracy. Independent laptop/projector acceptance remains necessary. Full-room SLAM and point-cloud export are reused from [RTAB-Map](RTABMAP_INTEGRATION.md); point-cloud inspection does not imply world-frame/projector registration.

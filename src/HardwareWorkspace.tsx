@@ -1,3 +1,7 @@
+import { RoomScanPanel } from './RoomScanPanel';
+import { measurementMatchesFrame } from './shared/measured';
+import { MeasuredRoomPanel } from './MeasuredRoomPanel';
+import type { RoomSolve, SurfaceCandidate } from './shared/roomSolve';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { bridge } from './bridge';
 import type { Snapshot } from './shared/bridge';
@@ -33,11 +37,15 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const [capturing, setCapturing] = useState(false), [progress, setProgress] = useState<CaptureProgress | null>(null), [resultNote, setResultNote] = useState('Capture a short check sequence first, then the coded stripes.');
   const [presentingManual, setPresentingManual] = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
+  const [solving, setSolving] = useState(false), [roomSolve, setRoomSolve] = useState<RoomSolve | null>(null);
+  const [mappingState, setMappingState] = useState('idle'), [mappingMessage, setMappingMessage] = useState(''), [appliedCandidate, setAppliedCandidate] = useState<string>();
+  const solveJob = useRef<{ cancel(): void } | null>(null), solvedSession = useRef<SensorSession | null>(null);
+  const operationActive = useRef(false);
   const sessionOperation = useRef(false);
   const [error, setError] = useState('');
   const previewAt = useRef(0);
   const importInput = useRef<HTMLInputElement>(null);
-  const busy = capturing || isRecording || saving || presentingManual || loadingSession;
+  const busy = capturing || isRecording || saving || presentingManual || loadingSession || solving;
   const [width, height] = resolution.split('x').map(Number), patterns = useMemo(() => patternSequence(width, height, sequenceKind), [width, height, sequenceKind]);
   const outputs = [...(output.current?.outputs.values() ?? [])];
   const frame = sourceMode === 'replay' ? selected?.frames[replayIndex] ?? null : liveFrame;
@@ -83,7 +91,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     const warn = (event: BeforeUnloadEvent) => { if (recording.current || controller.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', warn);
     return () => {
-      mounted.current = false; controller.current?.abort(); source.current?.stop(); source.current = null; recording.current = null;
+      mounted.current = false; controller.current?.abort(); solveJob.current?.cancel(); source.current?.stop(); source.current = null; recording.current = null;
       output.current?.dispose(); output.current = null; clearInterval(timer); unsubscribe(); window.removeEventListener('beforeunload', warn);
     };
   }, [inbox]);
@@ -126,21 +134,74 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
       await delay(20, signal);
       return { patternId: next.id, presentedAtMs: Date.now(), outputId: 'virtual-projector', mode: 'synthetic' as const, viewport: { width: next.width, height: next.height, devicePixelRatio: 1 }, rasterRect: { x: 0, y: 0, width: next.width, height: next.height } };
     }
-    const target = outputs.find(item => item.visible);
+    const target = [...(output.current?.outputs.values() ?? [])].find(item => item.visible);
     if (!target || !output.current) throw new Error('Open the projection output, move it to your projector, and keep it visible.');
     return output.current.present(next, target.outputId, signal);
   }
-  async function capture() {
-    if (!canAcquire || busy) return;
+  function checkMappingReady() {
+    if (!canAcquire || sourceMode !== 'live' || bridgeMode !== 'live' || !inbox.latest || Date.now() - inbox.latest.receivedAtMs > 2000) throw new Error('Connect a fresh live Kinect before mapping the physical table.');
+    if (inbox.latest.frame.device.colorRegistration !== 'depth' || !inbox.latest.frame.cameraPoints) throw new Error('Update and restart the Kinect helper to supply registered color and camera points.');
+    if (outputTarget !== 'output' || ![...(output.current?.outputs.values() ?? [])].some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen))) throw new Error('Open the output on the projector and press Full screen there before mapping.');
+  }
+  async function applyCandidate(candidate: SurfaceCandidate, kind: 'table' | 'wall', session = solvedSession.current) {
+    if (!session) throw new Error('Solve a capture first.');
+    if (session.provenance === 'sensor') {
+      checkMappingReady();
+      const measurement = candidate.surface.measurement!, live = inbox.latest!.frame;
+      if (!measurementMatchesFrame(measurement, live)) throw new Error('The sensor view changed since capture. Keep the rig fixed and scan again.');
+      const presentation = session.captures[0].presentation, currentOutput = output.current?.outputs.get(presentation.outputId);
+      if (!currentOutput || !currentOutput.visible || currentOutput.width !== measurement.viewport.width || currentOutput.height !== measurement.viewport.height || currentOutput.devicePixelRatio !== measurement.viewport.devicePixelRatio) throw new Error('Use the same unchanged full-screen output as the capture, or scan again.');
+    }
+    const surface = { ...candidate.surface, id: kind === 'table' ? 'tabletop' : 'wall', kind, name: kind === 'table' ? 'Measured tabletop' : 'Measured wall' };
+    const receipt = await bridge.dispatch({ type: 'surface.measure', surface });
+    if (!receipt.ok) throw new Error(receipt.error);
+    setAppliedCandidate(candidate.id); setMappingState('applied');
+    setMappingMessage(session.provenance === 'sensor' ? `${surface.name} mapped. Return to Studio and ask “Make the ${kind === 'table' ? 'tabletop' : 'wall'} red.” Check the physical footprint before use.` : 'Simulated mapping applied for preview only. No physical calibration has been established.');
+  }
+  async function solveCapture(session: SensorSession, autoApply = false) {
+    if (solveJob.current) throw new Error('A solve is already running.');
+    setSolving(true); setMappingState('solving'); setMappingMessage('Checking the capture…'); setError(''); setRoomSolve(null); setAppliedCandidate(undefined);
+    try {
+      const result = await new Promise<RoomSolve>((resolve, reject) => {
+        const worker = new Worker(new URL('./roomSolve.worker.ts', import.meta.url), { type: 'module' });
+        const finish = () => { worker.terminate(); clearTimeout(timer); solveJob.current = null; };
+        const timer = setTimeout(() => { finish(); reject(new Error('Surface solve timed out. Retry with a smaller capture.')); }, 45000);
+        solveJob.current = { cancel: () => { finish(); reject(new Error('Surface solve cancelled.')); } };
+        worker.onmessage = ({ data }) => { finish(); if (data.error) reject(new Error(data.error)); else resolve(data.result); };
+        worker.onerror = () => { finish(); reject(new Error('Surface solver could not run. Reload Studio and retry.')); };
+        worker.postMessage(session);
+      });
+      if (!mounted.current) return;
+      solvedSession.current = session; setRoomSolve(result); setMappingState('review'); setMappingMessage(result.message);
+      const tables = result.candidates.filter(c => c.kind === 'table');
+      if (autoApply && tables.length === 1) await applyCandidate(tables[0], 'table', session);
+      else if (autoApply) setMappingMessage(result.message + ' Select the correct patch below; no surface was changed automatically.');
+    } catch (e) { if (mounted.current) { setMappingState('error'); setMappingMessage(describeError(e)); setError(describeError(e)); } }
+    finally { if (mounted.current) setSolving(false); }
+  }
+  async function useCandidate(id: string, kind: 'table' | 'wall') {
+    const candidate = roomSolve?.candidates.find(c => c.id === id); if (!candidate || !['table', 'wall'].includes(kind)) throw new Error('Choose a detected surface.');
+    await applyCandidate(candidate, kind);
+  }
+  async function capture(mapTable = false) {
+    if (!canAcquire || busy || operationActive.current) return;
+    if (mapTable) checkMappingReady();
+    operationActive.current = true;
+    try {
+    const sequence = mapTable ? patternSequence(width, height) : patterns;
+    if (mapTable) { setMappingState('capturing'); setMappingMessage('Capturing the projector pattern sequence. Keep everything still.'); }
     const abort = new AbortController(); controller.current = abort; setCapturing(true); setError(''); setResultNote('');
-    const session = await capturePatterns({ id: crypto.randomUUID(), name: sessionName(sourceMode === 'demo' ? 'Demo pattern capture' : 'Pattern capture'), patterns, settleMs,
+    const session = await capturePatterns({ id: crypto.randomUUID(), name: sessionName(sourceMode === 'demo' ? 'Demo pattern capture' : 'Pattern capture'), patterns: sequence, settleMs: mapTable ? Math.max(750, settleMs) : settleMs,
       provenance: sourceMode === 'demo' ? 'synthetic' : 'sensor', inbox, signal: abort.signal, present, clear: clearPattern,
       verify: value => output.current?.verify(value), progress: value => { if (mounted.current) setProgress(value); } });
     controller.current = null;
     if (!mounted.current) return;
-    setCapturing(false); setResultNote(session.status === 'complete' ? `${session.frames.length} of ${patterns.length} patterns captured. Observations are ready for replay; geometry has not been solved.` : session.message);
+    setCapturing(false); setResultNote(session.status === 'complete' ? `${session.frames.length} of ${sequence.length} patterns captured. Use Solve selected capture to find mapped surfaces.` : session.message);
     if (session.status === 'failed') setError(session.message);
     await retain(session);
+    if (mapTable && session.status === 'complete') await solveCapture(session, true);
+    else if (mapTable) { setMappingState('error'); setMappingMessage(session.message); }
+    } finally { operationActive.current = false; controller.current = null; if (mounted.current) setCapturing(false); }
   }
   async function manualPattern(kind: 'white' | 'black' | 'grid') {
     if (busy) return false;
@@ -169,15 +230,19 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     finally { sessionOperation.current = false; if (mounted.current) setLoadingSession(false); }
   }
   const actualOutput = outputs.find(item => item.visible);
+  const validSurfaceIds = canAcquire && sourceMode === 'live' && bridgeMode === 'live' && inbox.latest && clock - inbox.latest.receivedAtMs < 2000
+    ? snapshot.scene.surfaces.filter(s => s.measurement?.source === 'sensor' && measurementMatchesFrame(s.measurement, inbox.latest!.frame) && outputs.some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen) && o.width === s.measurement!.viewport.width && o.height === s.measurement!.viewport.height && o.devicePixelRatio === s.measurement!.viewport.devicePixelRatio)).map(s => s.id) : [];
   useEffect(() => registerHardware({
     status: () => ({ initialized: true, mode: sourceMode, connection, message: error || connectionMessage,
       provenance: sourceMode === 'demo' || bridgeMode === 'demo' ? 'synthetic' : sourceMode === 'replay' || bridgeMode === 'replay' ? 'replay' : bridgeMode === 'live' ? 'sensor' : 'unknown',
       busy, canAcquire, frames: recordCount, recording: isRecording, capturing,
-      sessions: sessions.map(({ id, name, provenance, frames }) => ({ id, name, provenance, frames })), geometrySolved: false,
+      sessions: sessions.map(({ id, name, provenance, frames }) => ({ id, name, provenance, frames })), geometrySolved: snapshot.scene.surfaces.some(s => s.provenance === 'measured'),
+      sensorId: liveFrame?.device.id, validSurfaceIds,
+      mapping: { state: mappingState, message: mappingMessage, selectedId: appliedCandidate, candidates: roomSolve?.candidates.map(c => ({ id: c.id, label: c.label, kind: c.kind, width: c.surface.width, height: c.surface.height, rmsPx: c.rmsPx })) ?? [] },
       settings: { address, resolution: resolution as '1920x1080', sequence: sequenceKind, settleMs: settleMs as 300, outputTarget: outputTarget as 'demo' | 'output', replayRate: replayRate as 1, replayIndex } }),
     execute: async command => {
       if (!command || typeof command !== 'object') throw new Error('Choose a hardware action.');
-      if (command.action === 'cancel-capture') { controller.current?.abort(); return 'Capture cancellation requested. Existing captured frames are retained.'; }
+      if (command.action === 'cancel-capture') { controller.current?.abort(); solveJob.current?.cancel(); return 'Capture cancellation requested. Existing captured frames are retained.'; }
       if (command.action === 'stop-recording') { finishRecording(); return 'Recording stopped. Inspect storage status before claiming it is saved.'; }
       if (busy) throw new Error('Finish the active hardware operation first.');
       switch (command.action) {
@@ -204,14 +269,17 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         case 'pause-replay': setReplayPlaying(false); return 'Replay paused.';
         case 'clear-pattern': clearPattern(); return 'Projection content restored.';
         case 'pattern': if (sourceMode === 'replay' || !['white', 'black', 'grid'].includes(command.pattern)) throw new Error('Choose a supported live/demo pattern.'); if (!await manualPattern(command.pattern)) throw new Error('Pattern could not be presented. Check the hardware panel.'); return 'Pattern presentation acknowledged; physical exposure is unverified.';
+        case 'map-table': checkMappingReady(); void capture(true).catch(e => setError(describeError(e))); return 'Table scan started. Wait for mapping status; no physical surface is confirmed yet.';
+        case 'solve-surfaces': if (!selected) throw new Error('Select a completed capture first.'); void solveCapture(selected); return 'Surface solve started. Inspect mapping status for results.';
+        case 'use-surface': await useCandidate(command.candidateId, command.kind); return 'Detected surface applied. Check its physical footprint; this is a fixed-rig planar mapping.';
         case 'capture': if (!canAcquire || outputTarget === 'output' && !actualOutput) throw new Error('Connect a fresh sensor and open a visible projection output first.'); void capture(); return 'Capture started. Inspect progress; no measured geometry has been solved.';
         default: throw new Error('Unknown hardware action.');
       }
     },
   }));
   return <main className="hardware-workspace" id="hardware-workspace">
-    <div className="hardware-heading"><div><span className="eyebrow">PREPARE THE PHYSICAL ROOM</span><h2>Hardware setup</h2><p>See the sensor, record a session, and capture projection patterns.</p></div><span className="hardware-badge">{sourceMode === 'demo' ? 'Demo data' : sourceMode === 'replay' ? 'Recorded data' : bridgeMode === 'demo' ? 'Helper demo · view only' : bridgeMode === 'replay' ? 'Helper replay · view only' : 'Local sensor'}</span></div>
-    <div className="hardware-intro"><strong>Your scene stays intact.</strong> Patterns temporarily replace the output image. They do not change your content, surfaces or manual alignment. Automatic geometry solving comes next.</div>
+    <div className="hardware-heading"><div><span className="eyebrow">PREPARE THE PHYSICAL ROOM</span><h2>Hardware setup</h2><p>Connect the Kinect and map a stationary tabletop or wall.</p></div><span className="hardware-badge">{sourceMode === 'demo' ? 'Demo data' : sourceMode === 'replay' ? 'Recorded data' : bridgeMode === 'demo' ? 'Helper demo · view only' : bridgeMode === 'replay' ? 'Helper replay · view only' : 'Local sensor'}</span></div>
+    <div className="hardware-intro"><strong>Your scene stays intact.</strong> Patterns temporarily replace the output image. They do not change your content, surfaces or manual alignment. Scan & map table measures a flat surface and applies its projector alignment. Existing content is retained.</div>
     {error && <div className="hardware-alert" role="alert"><span>{error}</span><button aria-label="Dismiss hardware message" onClick={() => setError('')}>×</button></div>}
     <div className="hardware-columns">
       <section className="hardware-card sensor-card"><div className="hardware-card-title"><div><span className="eyebrow">01 / SENSOR INPUT</span><h3>What the camera sees</h3></div><span className={'sensor-status ' + (connected ? 'ready' : '')}>{sourceMode === 'replay' ? 'Replay' : connected ? 'Receiving frames' : connection === 'connecting' ? 'Connecting…' : connection === 'waiting' ? 'Waiting for sensor' : connection === 'ended' ? 'Replay finished' : 'Not connected'}</span></div>
@@ -221,7 +289,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         {sourceMode === 'live' && <div className="hardware-source-note"><p>Start the sensor helper on this computer, then connect. The native Kinect helper targets Windows; physical capture still needs hardware verification. The helper’s demo and replay modes also work on Mac for testing the connection.</p>{bridgeMode && bridgeMode !== 'live' && <p>This is {bridgeMode === 'demo' ? 'generated data' : 'a recorded stream'}, not a live measurement. Recording and calibration capture are disabled. Use the in-app Demo sensor for simulated pattern captures.</p>}<label className="field"><span>Local bridge address</span><input aria-label="Local sensor bridge address" value={address} disabled={busy || connectionOpen} onChange={e => setAddress(e.target.value)} /></label></div>}
         <div className="sensor-previews"><SensorPreview frame={frame} kind="color" /><SensorPreview frame={frame} kind="depth" /></div>
         <p className="hardware-caption">{sourceMode === 'replay' ? selected ? `${selected.provenance === 'synthetic' ? 'Synthetic' : 'Sensor'} recording · original capture timing retained` : 'Choose or import a recording from the library.' : connectionMessage}</p>
-        {frame && <div className="sensor-details"><span>Frame <strong>{frame.sequence}</strong></span><span>Color <strong>{frame.device.color.width} × {frame.device.color.height}</strong></span><span>Depth <strong>{frame.device.depth.width} × {frame.device.depth.height}</strong></span><span>Depth unit <strong>{frame.device.depthScaleMeters * 1000} mm</strong></span><span>Camera calibration <strong>{frame.device.colorIntrinsics && frame.device.depthIntrinsics ? 'Included' : 'Not supplied'}</strong></span></div>}
+        {frame && <div className="sensor-details"><span>Frame <strong>{frame.sequence}</strong></span><span>Color <strong>{frame.device.color.width} × {frame.device.color.height}</strong></span><span>Depth <strong>{frame.device.depth.width} × {frame.device.depth.height}</strong></span><span>Depth unit <strong>{frame.device.depthScaleMeters * 1000} mm</strong></span><span>Registered 3D <strong>{frame.cameraPoints && frame.device.colorRegistration === 'depth' ? 'SDK points included' : 'Update helper for mapping'}</strong></span></div>}
         {sourceMode !== 'replay' ? <div className="recording-controls"><label className="field"><span>Record for</span><select aria-label="Recording duration" disabled={busy} value={duration} onChange={e => setDuration(Number(e.target.value))}>{![5,10,30].includes(duration) && <option value={duration}>{duration} seconds</option>}<option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option></select></label><button className={isRecording ? 'secondary' : 'primary'} disabled={!isRecording && (!canAcquire || busy)} onClick={() => isRecording ? finishRecording() : startRecording()}>{isRecording ? 'Stop & save recording' : 'Record session'}</button><span>{isRecording ? `${recordCount} frames · ${Math.max(0, Math.ceil(((recording.current?.endAt ?? clock) - clock) / 1000))}s left` : 'Up to 5 frames / second'}</span></div> : selected && <div className="replay-controls"><div><button className="primary" onClick={() => { if (replayIndex === selected.frames.length - 1) setReplayIndex(0); setReplayPlaying(p => !p); }}>{replayPlaying ? 'Pause replay' : 'Play replay'}</button><label className="field"><span>Speed</span><select aria-label="Replay speed" value={replayRate} onChange={e => setReplayRate(Number(e.target.value))}><option value={.25}>¼×</option><option value={1}>1×</option><option value={2}>2×</option></select></label><span>Frame {replayIndex + 1} of {selected.frames.length}</span></div><input aria-label="Replay frame" type="range" min={0} max={selected.frames.length - 1} value={replayIndex} onChange={e => { setReplayPlaying(false); setReplayIndex(Number(e.target.value)); }} /></div>}
       </section>
       <section className="hardware-card library-card"><div className="hardware-card-title"><div><span className="eyebrow">KEEP THE EVIDENCE</span><h3>Recordings</h3></div><label className={'hardware-file-button secondary ' + (busy ? 'disabled' : '')}>Import<input ref={importInput} type="file" accept=".pmsession" aria-label="Import sensor recording" disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void importSession(file); }} /></label></div>
@@ -230,6 +298,9 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
         {selected && <div className="selected-session"><strong>{selected.name}</strong><p>{selected.frames.length} frames · {sizeLabel(sessionBytes(selected))}{selected.captures.length ? ` · ${selected.captures.length}/${selected.plannedPatterns.length} patterns` : ''}</p>{selected.message && <p>{selected.message}</p>}<div className="hardware-actions"><button className="secondary" disabled={busy} onClick={() => { changeSource('replay'); setReplayIndex(0); }}>Review</button><button className="secondary" disabled={saving} onClick={() => { try { downloadSensorSession(selected); } catch (e) { setError(describeError(e)); } }}>Download</button><button className="hardware-text-button" disabled={busy} onClick={async () => { try { await deleteSensorSession(selected.id); setSessions(await listSensorSessions()); setSelected(null); setReplayPlaying(false); } catch (e) { setError(describeError(e)); } }}>Delete</button></div></div>}
       </section>
     </div>
+    <MeasuredRoomPanel result={roomSolve} state={mappingState} message={mappingMessage} busy={busy} canMap={canAcquire && sourceMode === 'live' && bridgeMode === 'live'} canSolve={selected?.kind === 'pattern-capture' && selected.status === 'complete'} appliedId={appliedCandidate}
+      map={() => void capture(true).catch(e => { setError(describeError(e)); setMappingMessage(describeError(e)); })} solve={() => selected && void solveCapture(selected)} useSurface={(id, kind) => void useCandidate(id, kind).catch(e => setError(describeError(e)))} />
+    <RoomScanPanel />
     <section className="hardware-card pattern-card"><div className="hardware-card-title"><div><span className="eyebrow">02 / PATTERN CAPTURE</span><h3>Connect pixels to observations</h3></div><span className="hardware-badge">Capture only · no geometry changes</span></div>
       <div className="pattern-columns"><div><PatternPreview pattern={shownPattern} /><p className="hardware-caption">{shownPattern ? patternLabel(shownPattern) : 'Choose a test pattern or start a sequence.'}</p>{replayCapture && <p className="hardware-caption">Captured after {replayCapture.settleMs} ms settling · {replayCapture.presentation.mode === 'synthetic' ? 'Virtual projector' : 'Output window'} · source clock ±{frame?.clockUncertaintyMs} ms</p>}</div>
         <div className="pattern-settings"><div className="hardware-controls"><label className="field"><span>Output</span><select aria-label="Pattern output target" value={outputTarget} disabled={busy || sourceMode === 'replay'} onChange={e => { clearPattern(); setOutputTarget(e.target.value); }}><option value="demo" disabled={sourceMode !== 'demo'}>In-app demo projector</option><option value="output">Projection output window</option></select></label><button className="secondary" disabled={busy} onClick={() => { void bridge.output({ action: 'open' }).catch(e => setError(describeError(e))); setOutputTarget('output'); }}>Open output ↗</button></div>
@@ -237,7 +308,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
           <div className="hardware-controls"><label className="field"><span>Pattern resolution</span><select aria-label="Pattern resolution" value={resolution} disabled={busy || sourceMode === 'replay'} onChange={e => { clearPattern(); setResolution(e.target.value); }}><option value="1920x1080">1920 × 1080</option><option value="1280x720">1280 × 720</option><option value="640x480">640 × 480</option></select></label><label className="field"><span>Settle before capture</span><select aria-label="Pattern settling time" value={settleMs} disabled={busy || sourceMode === 'replay'} onChange={e => setSettleMs(Number(e.target.value))}><option value={150}>150 ms</option><option value={300}>300 ms</option><option value={750}>750 ms</option><option value={1500}>1.5 seconds</option></select></label></div>
           <div className="hardware-actions pattern-checks">{(['grid', 'white', 'black'] as const).map(kind => <button key={kind} className="secondary" disabled={busy || sourceMode === 'replay'} onClick={() => void manualPattern(kind)}>{kind === 'grid' ? 'Test grid' : kind === 'white' ? 'White' : 'Black'}</button>)}<button className="hardware-text-button" disabled={capturing || presentingManual} onClick={clearPattern}>Restore content</button></div>
           <label className="field"><span>Capture sequence</span><select aria-label="Capture sequence" disabled={busy || sourceMode === 'replay'} value={sequenceKind} onChange={e => setSequenceKind(e.target.value as 'gray' | 'checks')}><option value="checks">Quick check · 3 patterns</option><option value="gray">Gray code · {patternSequence(width, height).length} patterns</option></select></label>
-          <div className="hardware-actions"><button className="primary" disabled={!canAcquire || busy || outputTarget === 'output' && !actualOutput} onClick={() => void capture()}>{selected?.kind === 'pattern-capture' && selected.status !== 'complete' ? 'Retry sequence' : 'Capture sequence'}</button>{capturing && <button className="secondary" onClick={() => controller.current?.abort()}>Cancel capture</button>}</div>
+          <div className="hardware-actions"><button className="primary" disabled={!canAcquire || busy || outputTarget === 'output' && !actualOutput} onClick={() => void capture()}>{selected?.kind === 'pattern-capture' && selected.status !== 'complete' ? 'Retry sequence' : 'Capture sequence'}</button>{(capturing || solving) && <button className="secondary" onClick={() => { controller.current?.abort(); solveJob.current?.cancel(); }}>Cancel capture</button>}</div>
           {capturing && progress && <div className="capture-progress" role="status"><progress value={progress.index} max={progress.total} /><span>{progress.index} / {progress.total} captured · {progress.phase === 'presenting' ? 'Displaying pattern' : progress.phase === 'settling' ? 'Waiting for the image to settle' : 'Waiting for a fresh camera frame'}</span></div>}
           <p className="hardware-caption" role="status">{resultNote}</p>
         </div>

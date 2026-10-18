@@ -5,7 +5,7 @@ const keys = new WeakMap<Scene, { plain: string; timers: string }>();
 export function artworkSceneKey(scene: Scene, withTimers: boolean): string {
   let cached = keys.get(scene);
   if (!cached) {
-    const plain = JSON.stringify([scene.geometryRevision, scene.contents]);
+    const plain = JSON.stringify([scene.geometryRevision, scene.surfaces.map(s => s.fill), scene.contents]);
     cached = { plain, timers: plain + JSON.stringify(scene.timers) }; keys.set(scene, cached);
   }
   return withTimers ? cached.timers : cached.plain;

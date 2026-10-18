@@ -30,6 +30,21 @@ The browser path is the target for this helper integration. **Launch Studio.cmd*
 
 ## What this prepares
 
-Use HDMI as an extended display, open the clean projection output, and position/full-screen it on the projector. Begin with the grid and one stationary surface. Pattern capture collects observations; decoding, a measured calibration solve, measured-scene import, physical validation and Kinect hand/body interaction remain separate work.
+Use HDMI as an extended display, open the clean projection output, and position/full-screen it on the projector. Begin with the grid and one stationary surface. The new stationary planar solver decodes registered captures and imports a measured tabletop or wall mask. Physical validation and Kinect hand/body interaction remain separate work.
 
 The launch logic avoids shell interpolation when invoking npm on Windows, following [Node's process-launch behavior](https://nodejs.org/api/child_process.html#spawning-bat-and-cmd-files-on-windows). Software tests exercise argument handling and failures on Mac; actual `.cmd` execution still needs a Windows run.
+
+## Update and map a tabletop
+
+1. Stop the app and helper when ready to interrupt playback. Pull the latest `main` in this checkout, then run **Setup Windows.cmd** to rebuild the app, agent and helper. Your local `agent/.env` is retained; it is not in GitHub.
+2. Close Kinect Studio and RTAB-Map. Run **Start Kinect.cmd**; it rebuilds the native adapter against the installed Kinect SDK and starts the local relay. Keep that terminal open. Run **Start Projection Mapper.cmd** for the Studio.
+3. In **Hardware**, choose the local Kinect bridge and **Connect sensor**. The sensor details must show **SDK points included**. If not, rebuild/restart the helper. Hold the sensor still; both it and the projector must see the table.
+4. Use HDMI extended display. Open the output window on the projector and press **Full screen** there. Leave it visible. Keep projector zoom, keystone and automatic positioning fixed. Choose the matching source resolution in Hardware; start with generous 750–1500 ms settling.
+5. Choose **Scan & map table**. This takes roughly a minute. The app uses measured depth and projected stripes, rejects inconsistent captures, and masks unknown/occluded pixels. A single table-height horizontal candidate is applied automatically; with no reliable floor estimate or multiple candidates, choose the correct patch. Existing content is retained.
+6. Return to Studio and ask **“Make the physical tabletop red.”** Keep the helper connected. The agent requires a measured surface, matching live sensor and a compatible visible fullscreen output. A stale view asks for another scan. You can also select the surface and set **Surface color** directly; this manual control does not certify physical alignment. **Clear surface color** removes the fill.
+
+Check that the projected footprint matches the tabletop before putting content on it. This is a fixed-rig planar calibration, not moving-object tracking. Sensor/depth changes and output-size changes can invalidate the agent's mapping gate. Moving only the projector, changing its internal keystone, or moving an object without a detectable depth difference cannot be reliably detected; re-scan after any such change. Existing saved projection remains visible until you clear/change it; it is not automatically blanked by a sensor disconnect.
+
+If the laptop struggles, close Kinect Studio's 3D view and other capture programs. Our helper processes up to five registered frames per second with a latest-frame mailbox. Keep optional Studio 3D previews off. This reduces our processing load; it does not establish whether a particular USB controller, adapter, GPU or laptop causes the reported dropouts. Run the Kinect SDK Configuration Verifier and test the stationary feed first.
+
+Optional whole-room reconstruction uses [RTAB-Map integration](RTABMAP_INTEGRATION.md). It is a separate scanning workflow, not required for table color projection.

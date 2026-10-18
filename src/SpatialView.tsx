@@ -1,3 +1,4 @@
+import { measuredMaskPath } from './shared/measured';
 import { layerOpacity, layerVisible, renderWidth, surfaceLayers } from './shared/layers';
 import { localMediaSource } from './localMedia';
 import { paintTimer } from './timerPainter';
@@ -47,8 +48,9 @@ export function getArtwork(scene: Scene, surface: Surface, now: number, withTime
   record.stamp = stamp;
   const ctx = record.canvas.getContext('2d')!;
   ctx.clearRect(0, 0, TEX_W, TEX_H); ctx.save(); domainPath(ctx, surface, TEX_W, TEX_H); ctx.clip('evenodd');
-  ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, TEX_W, TEX_H);
-  if (art?.kind === 'art') { ctx.save(); ctx.globalAlpha = layerOpacity(art); paintArt(ctx, art, surface, TEX_W, TEX_H, now); ctx.restore(); }
+  if (surface.measurement) ctx.clip(new Path2D(measuredMaskPath(surface.measurement.mask, TEX_W, TEX_H)));
+  ctx.fillStyle = surface.fill ?? '#000000'; ctx.fillRect(0, 0, TEX_W, TEX_H);
+  if (!surface.fill && art?.kind === 'art') { ctx.save(); ctx.globalAlpha = layerOpacity(art); paintArt(ctx, art, surface, TEX_W, TEX_H, now); ctx.restore(); }
   paintSceneBacklight(ctx, scene, surface, TEX_W, TEX_H, now);
   if (scene.showGrid) {
     ctx.strokeStyle = '#cff7cf99'; ctx.lineWidth = 1;
@@ -104,16 +106,16 @@ function surfaceGeometry(surface: Surface) {
   geometry.computeVertexNormals(); return geometry;
 }
 
-function surfaceMaterial(texture: THREE.Texture, mask: THREE.Texture, mode: number) {
+function surfaceMaterial(texture: THREE.Texture, mask: THREE.Texture, mode: number, measured: boolean) {
   return new THREE.ShaderMaterial({
-    side: THREE.DoubleSide, uniforms: { art: { value: texture }, coverage: { value: mask }, viewMode: { value: mode } },
+    side: THREE.DoubleSide, uniforms: { art: { value: texture }, coverage: { value: mask }, viewMode: { value: mode }, measured: { value: measured ? 1 : 0 } },
     vertexShader: 'varying vec2 surfaceUv; void main(){surfaceUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-    fragmentShader: `uniform sampler2D art; uniform sampler2D coverage; uniform float viewMode; varying vec2 surfaceUv;
+    fragmentShader: `uniform sampler2D art; uniform sampler2D coverage; uniform float viewMode; uniform float measured; varying vec2 surfaceUv;
       void main(){
         vec3 base=texture2D(art,vec2(surfaceUv.x,1.0-surfaceUv.y)).rgb;
         vec2 weights=texture2D(coverage,surfaceUv).rg;
         float total=weights.r+weights.g;
-        vec3 color=total>0.0?base:vec3(0.037,0.048,0.04);
+        vec3 color=total>0.0||measured>0.5?base:vec3(0.037,0.048,0.04);
         if(viewMode>0.5 && viewMode<1.5){
           color=vec3(0.03,0.04,0.035);
           if(weights.r>0.0)color=vec3(0.15,0.64,0.46);
@@ -172,7 +174,7 @@ export function SpatialView({ scene, view, coverage = false, resetKey = 0, onSel
       addBox([table.origin[0] + table.width / 2, table.origin[1] - .055, table.origin[2] + table.height / 2], [table.width + .025, .10, table.height + .025], isOutput ? '#000000' : '#35473b');
       for (const x of [.12, table.width - .12]) for (const z of [.12, table.height - .12]) addBox([table.origin[0] + x, table.origin[1] / 2 - .055, table.origin[2] + z], [.065, Math.max(.04, table.origin[1] - .1), .065], isOutput ? '#000000' : '#344238');
       for (const surface of state.surfaces) {
-        const material = surfaceMaterial(getArtwork(state, surface, Date.now()).texture, getMask(state, surface), 0); materials.push(material);
+        const material = surfaceMaterial(getArtwork(state, surface, Date.now()).texture, getMask(state, surface), 0, !!surface.measurement); materials.push(material);
         const mesh = new THREE.Mesh(collect(surfaceGeometry(surface)), material); mesh.userData.surfaceId = surface.id; world.add(mesh); meshes.push({ id: surface.id, mesh, material });
         if (view === 'orbit') {
           for (const poly of [surface.boundary, ...surface.holes]) {

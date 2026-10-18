@@ -1,3 +1,4 @@
+import { measuredMaskCSS } from './shared/measured';
 import { readMediaPicture } from './nativeMedia';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { formatTime, remaining, getSurface, type Command, type Scene, type Timer } from './shared/domain';
@@ -137,7 +138,7 @@ export function Stage({ scene, now, mode, send, clean = false, playing = false, 
   return <><div hidden={!active} className={`viewport ${clean ? 'clean' : ''} ${!aligning ? 'layout-view' : ''}`} ref={viewport}
     onPointerMove={move} onPointerUp={finishDrag} onPointerCancel={finishDrag} onLostPointerCapture={finishDrag}>
     <div className="logical-stage" style={{ transform: `scale(${scale})`, filter: `brightness(${scene.display?.brightness ?? 1})`, visibility: clean && scene.display?.blackout ? 'hidden' : undefined }}>
-      <div className={`render-plane ${scene.showGrid ? 'with-grid' : ''}`} style={{ transform: cssMatrix(quad), clipPath: surfaceClipPath(surface, WIDTH, HEIGHT) }}>
+      <div className={`render-plane ${scene.showGrid ? 'with-grid' : ''}`} style={{ transform: cssMatrix(quad), clipPath: measuredMaskCSS(surface.measurement) ?? surfaceClipPath(surface, WIDTH, HEIGHT) }}>
         <SurfaceArtwork scene={scene} surface={surface} liveVideos={playing || clean || aligning} highResolution={clean} active={active} backgroundOnly />
         {layers.filter(c => 'kind' in c && c.kind !== 'art' && layerVisible(c)).map(c => 'kind' in c && !(c.kind === 'youtube' && !window.projectionMedia && showPlayers) ? <div key={c.id} className="painted-layer" data-layer-id={c.id} style={{ zIndex: zIndex(c.id), opacity: layerOpacity(c) }}>
           <LayerArtwork content={c} scene={scene} output={clean} active={active} />
@@ -269,6 +270,6 @@ export function CalibrationControls({ scene, send }: { scene: Scene; send: (c: C
       <NumberField label={`${cornerTags[i]} Y`} value={Math.round(p.y * 1000) / 10} min={0} max={100} step={.1} suffix="%" onCommit={n => update(i, 'y', n)} />
     </div>)}</div>
     <button className="secondary full-width" onClick={() => send({ type: 'calibration.reset' })}>Reset corners</button>
-    <p className="hint">These are manual alignment settings. Camera calibration comes next.</p>
+    <p className="hint">{scene.manualOutput.calibration === 'measured-planar' ? 'This alignment came from a measured planar capture. Adjusting a corner switches to manual alignment.' : 'Use Hardware setup for Kinect-assisted planar calibration.'}</p>
   </>;
 }

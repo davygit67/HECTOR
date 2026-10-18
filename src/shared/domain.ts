@@ -1,3 +1,4 @@
+import { validateMeasurement } from './measured.js';
 import { BACKLIGHT_DEFAULTS, validateBacklightSettings } from './backlight.js';
 import { DEFAULT_QUAD, FULL_QUAD, constrainBounds, isValidQuad, isValidProjectionQuad, type Bounds, type Quad } from './geometry.js';
 import { boundsInDomain, cameraBasis, coverageRecords, defaultSpatial, finiteVec, fitBounds, dot, length, LEGACY_WALL_BOUNDARY, LEGACY_WALL_HOLES, type Coverage, type Projector, type Surface, type Vec3, type Viewer } from './spatial.js';
@@ -15,11 +16,11 @@ export interface Timer {
 export interface Scene {
   display?: DisplaySettings;
   schemaVersion: 3; revision: number; geometryRevision: number; showGrid: boolean;
-  frame: { id: 'simulated-room'; units: 'meters'; provenance: 'simulated'; up: '+Y' };
+  frame: { id: 'simulated-room'; units: 'meters'; provenance: 'simulated' | 'mixed'; up: '+Y' };
   surfaces: Surface[]; projectors: Projector[]; viewer: Viewer; coverage: Coverage[];
   selectedSurfaceId: string; timers: Timer[]; selectedTimerId: string | null;
   contents: ContentInstance[]; selectedContentId: string | null;
-  manualOutput: { surfaceId: string; quad: Quad; calibration: 'manual-2d' };
+  manualOutput: { surfaceId: string; quad: Quad; calibration: 'manual-2d' | 'measured-planar' };
   outputView: 'manual' | 'projector-a' | 'projector-b';
   /** Retired demo state, retained only for compatibility with older saves. */
   effect: { enabled: boolean; running: boolean; startedAt: number; elapsedMs: number };
@@ -40,6 +41,8 @@ export type Command =
   | { type: 'calibration.reset' }
   | { type: 'grid.set'; visible: boolean }
   | { type: 'surface.select'; id: string }
+  | { type: 'surface.measure'; surface: Surface }
+  | { type: 'surface.fill'; id: string; color: string | null }
   | { type: 'surface.move'; id: string; origin: Vec3 }
   | { type: 'surface.demo-exclusion'; id: string; enabled: boolean }
   | { type: 'projector.update'; id: string; position?: Vec3; target?: Vec3; enabled?: boolean }
@@ -243,8 +246,8 @@ export function reduceScene(scene: Scene, command: Command, now = Date.now()): S
       break;
     case 'calibration.set':
       if (!isValidProjectionQuad(command.quad)) throw new Error('Keep all four corners in order, with some space between them.');
-      next.manualOutput.quad = structuredClone(command.quad); break;
-    case 'calibration.reset': next.manualOutput.quad = structuredClone(DEFAULT_QUAD); break;
+      next.manualOutput.quad = structuredClone(command.quad); next.manualOutput.calibration = 'manual-2d'; break;
+    case 'calibration.reset': next.manualOutput.quad = structuredClone(DEFAULT_QUAD); next.manualOutput.calibration = 'manual-2d'; break;
     case 'grid.set':
       if (typeof command.visible !== 'boolean') throw new Error('Invalid grid setting.');
       next.showGrid = command.visible; break;
@@ -252,8 +255,29 @@ export function reduceScene(scene: Scene, command: Command, now = Date.now()): S
       getSurface(next, command.id); next.selectedSurfaceId = command.id;
       next.selectedTimerId = next.timers.find(t => t.surfaceId === command.id)?.id ?? null;
       next.selectedContentId = next.selectedTimerId ? null : next.contents.find(c => c.surfaceId === command.id)?.id ?? null; break;
+    case 'surface.fill': {
+      const surface = getSurface(next, command.id);
+      if (command.color !== null && (typeof command.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(command.color))) throw new Error('Choose a six-digit hex surface color.');
+      if (command.color === null) delete surface.fill; else surface.fill = command.color.toLowerCase();
+      if (surface.measurement && next.manualOutput.surfaceId !== surface.id) { next.manualOutput = { surfaceId: surface.id, quad: structuredClone(surface.measurement.quad), calibration: 'measured-planar' }; }
+      if (surface.measurement) next.outputView = 'manual';
+      break;
+    }
+    case 'surface.measure': {
+      const incoming = structuredClone(command.surface), previous = getSurface(next, incoming?.id);
+      if (!incoming.measurement) throw new Error('A measured projector fit is required.');
+      validateMeasurement(incoming.measurement);
+      if (incoming.measurement.source === 'sensor' && incoming.provenance !== 'measured' || incoming.measurement.source === 'synthetic' && incoming.provenance !== 'simulated') throw new Error('Measurement provenance does not match its surface.');
+      if (previous.fill) incoming.fill = previous.fill;
+      next.surfaces[next.surfaces.indexOf(previous)] = incoming;
+      next.frame.provenance = next.surfaces.some(s => s.provenance === 'measured') ? 'mixed' : 'simulated';
+      next.geometryRevision++; next.selectedSurfaceId = incoming.id;
+      next.manualOutput = { surfaceId: incoming.id, quad: structuredClone(incoming.measurement.quad), calibration: 'measured-planar' }; next.outputView = 'manual';
+      validateSpatial(next); break;
+    }
     case 'surface.move':
       if (!finiteVec(command.origin) || command.origin[1] < 0) throw new Error('Use finite coordinates above the room floor.');
+      if (getSurface(next, command.id).measurement) throw new Error('Measured geometry is fixed to the sensor. Recalibrate after moving the rig or surface.');
       getSurface(next, command.id).origin = [...command.origin]; next.geometryRevision++; break;
     case 'surface.demo-exclusion': {
       const surface = getSurface(next, command.id);
@@ -281,7 +305,7 @@ export function reduceScene(scene: Scene, command: Command, now = Date.now()): S
       next.outputView = command.view; break;
     case 'manual.target':
       getSurface(next, command.surfaceId);
-      if (next.manualOutput.surfaceId !== command.surfaceId) next.manualOutput = { surfaceId: command.surfaceId, quad: structuredClone(DEFAULT_QUAD), calibration: 'manual-2d' };
+      if (next.manualOutput.surfaceId !== command.surfaceId) { const m = getSurface(next, command.surfaceId).measurement; next.manualOutput = { surfaceId: command.surfaceId, quad: structuredClone(m?.quad ?? DEFAULT_QUAD), calibration: m ? 'measured-planar' : 'manual-2d' }; }
       break;
     default: throw new Error('Unknown command.');
   }
@@ -349,15 +373,18 @@ export function readScene(value: unknown): Scene {
 }
 
 function validateSpatial(s: Scene) {
-  if (s.frame?.id !== 'simulated-room' || s.frame.units !== 'meters' || s.frame.provenance !== 'simulated' || s.frame.up !== '+Y'
+  if (s.frame?.id !== 'simulated-room' || s.frame.units !== 'meters' || !['simulated', 'mixed'].includes(s.frame.provenance) || s.frame.up !== '+Y'
     || !Number.isSafeInteger(s.geometryRevision) || s.geometryRevision < 0 || !Array.isArray(s.surfaces) || s.surfaces.length !== 2
     || !Array.isArray(s.projectors) || s.projectors.length !== 2) throw new Error('Invalid spatial scene.');
   const ids = new Set<string>();
   for (const surface of s.surfaces) {
     if (!surface || !['tabletop', 'wall'].includes(surface.id) || ids.has(surface.id) || typeof surface.name !== 'string' || !['wall', 'table'].includes(surface.kind)
-      || surface.provenance !== 'simulated' || !finiteVec(surface.origin) || !finiteVec(surface.u) || !finiteVec(surface.v)
+      || !['simulated', 'measured'].includes(surface.provenance) || !finiteVec(surface.origin) || !finiteVec(surface.u) || !finiteVec(surface.v)
       || Math.abs(length(surface.u) - 1) > 1e-6 || Math.abs(length(surface.v) - 1) > 1e-6 || Math.abs(dot(surface.u, surface.v)) > 1e-6
       || !Number.isFinite(surface.width) || surface.width <= 0 || surface.width > 30 || !Number.isFinite(surface.height) || surface.height <= 0 || surface.height > 30) throw new Error('Invalid saved surface.');
+    if (surface.fill !== undefined && (typeof surface.fill !== 'string' || !/^#[0-9a-f]{6}$/i.test(surface.fill))) throw new Error('Invalid surface fill.');
+    if (surface.measurement) { validateMeasurement(surface.measurement); if ((surface.measurement.source === 'sensor') !== (surface.provenance === 'measured')) throw new Error('Invalid surface provenance.'); }
+    else if (surface.provenance === 'measured') throw new Error('Measured surface is missing calibration evidence.');
     ids.add(surface.id);
     // Accept the known demo domain with its optional cutout, including older v3 saves.
     const template = defaultSpatial().surfaces.find(t => t.id === surface.id)!;
@@ -365,7 +392,8 @@ function validateSpatial(s: Scene) {
       || surface.holes.length && JSON.stringify(surface.holes) !== JSON.stringify(template.holes)) throw new Error('Unrecognized surface boundary.');
   }
   getSurface(s); getSurface(s, s.manualOutput.surfaceId);
-  if (s.manualOutput.calibration !== 'manual-2d' || !['manual', 'projector-a', 'projector-b'].includes(s.outputView)) throw new Error('Invalid output adapter.');
+  if (!['manual-2d', 'measured-planar'].includes(s.manualOutput.calibration) || !['manual', 'projector-a', 'projector-b'].includes(s.outputView)) throw new Error('Invalid output adapter.');
+  if (s.manualOutput.calibration === 'measured-planar' && !getSurface(s, s.manualOutput.surfaceId).measurement) throw new Error('Measured output needs a measured surface.');
   const projectors = new Set<string>();
   for (const p of s.projectors) {
     if (!p || !['projector-a', 'projector-b'].includes(p.id) || projectors.has(p.id) || typeof p.enabled !== 'boolean' || p.calibration !== 'simulated'

@@ -1,8 +1,10 @@
+import type { SurfaceMeasurement } from './measured.js';
 import { clamp, FULL_QUAD, type Bounds, type Point } from './geometry.js';
 
 export type Vec3 = [number, number, number];
 export interface Surface {
-  id: string; name: string; kind: 'table' | 'wall'; provenance: 'simulated';
+  id: string; name: string; kind: 'table' | 'wall'; provenance: 'simulated' | 'measured';
+  fill?: string; measurement?: SurfaceMeasurement;
   origin: Vec3; u: Vec3; v: Vec3; width: number; height: number;
   boundary: Point[]; holes: Point[][];
 }

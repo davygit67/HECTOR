@@ -1,5 +1,8 @@
 # Projection Mapper · spatial studio 0.3
 
+Current Kinect update: [map a stationary tabletop on Windows](WINDOWS_SETUP.md#update-and-map-a-tabletop), then ask the agent to fill its measured surface. Optional [RTAB-Map 0.23.8 integration](RTABMAP_INTEGRATION.md) provides room-cloud export and inspection in the existing Hardware page. Windows hardware qualification and whole-room projector registration remain pending.
+
+
 **Working with a co-founder:** see [collaboration and GitHub setup](COLLABORATING.md) for cloning, local API-key setup, reviewed commits, and safe automatic synchronization. GitHub contains the integrated source; room layouts, media, sign-in sessions and credentials remain local.
 
 **Hardware setup:** the same studio now has a Hardware setup tab for demo RGB/depth input, recordings, import/export/replay, and grid/Gray-code pattern capture. Start a demo sensor and run Quick check before connecting hardware. The local helper connection distinguishes live, generated and replayed frames, with waiting/recovery states. Physical Kinect verification and automatic calibration solving remain pending. See [sensor capture guide](SENSOR_CAPTURE.md).

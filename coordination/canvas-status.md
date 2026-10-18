@@ -1,4 +1,14 @@
-# Canvas task status · 0.3 ready
+# Canvas task status
+
+## Kinect planar mapping + RTAB-Map adapter · October 17 · verified, publishing
+
+Added the stationary table workflow in the existing Hardware page. Registered RGB, SDK XYZ and optional floor data feed a worker that decodes Gray patterns, fits connected planes and projector homographies, and preserves observed coverage with a 96 × 96 mask. A unique horizontal table-height candidate can apply automatically; missing floor or ambiguity requires selection. Canonical measured surfaces preserve existing assets. Surface fill/clear has UI and agent controls. Fresh sensor identity, sparse saved depth and fullscreen output dimensions gate physical agent fills. Saved projection is not automatically blanked after sensor loss. Projector-only movement/internal keystone cannot be detected; keep the rig fixed and verify its footprint. Curved objects and live tracking remain unsupported.
+
+Inspected upstream RTAB-Map tag 0.23.8 at commit d069becc724905d6465a8758c40dae88e13bb9e8 in a temporary clone. Added an external exporter wrapper and bounded PLY import/inspection using Three.js, including PCL camera metadata. RTAB-Map supplies its existing odometry, reconstruction, loop closure and export. No upstream engine binaries/source or private scans are vendored. Imported clouds remain in their own coordinates; whole-room/projector registration is pending. See RTABMAP_INTEGRATION.md and WINDOWS_SETUP.md.
+
+Validation: 196 root tests and production build pass. Browser worker solved a synthetic 1.42 × 1.02 m patch with 0.40 px internal fit residual; actual Stage pixels were red with the synthetic occluder black. A PCL-compatible 400-point synthetic PLY imported through the actual file picker. These are generated fixtures, not measured physical accuracy. Peer reports 114 agent tests, 19 helper transport checks, 31 actual C# core checks and four isolated real OpenAI fixtures passing. Windows native SDK compilation, USB/capture, RTAB-Map execution and physical projection still need laptop qualification. No live scene/media changes, native host restart or unexpected audio. Existing private archives remain unchanged.
+
+Agent owner committed its reviewed slice as ff7bc31 and released the Git window. Canvas is publishing its explicit owned paths, then pushing both completed commits. Synchronization was deferred throughout shared dirty work; normal idle/clean synchronization can resume after publication.
 
 ## YouTube next / skip-ad / autoplay controls · October 17 · verified
 

@@ -5,7 +5,7 @@ import { checkAbort } from './shared/sensorStream';
 export const PATTERN_CHANNEL = 'projection-mapper.pattern-output.v1';
 export interface PatternOutputStatus {
   outputId: string; visible: boolean; width: number; height: number; devicePixelRatio: number; atMs: number;
-  activeOwner: string | null; patternId: string | null;
+  activeOwner: string | null; patternId: string | null; fullscreen?: boolean;
 }
 export class PatternOutputClient {
   readonly ownerId = crypto.randomUUID();
@@ -50,7 +50,7 @@ export class PatternOutputClient {
   verify(presentation: PatternPresentation) {
     if (presentation.mode !== 'output-window') return;
     const state = this.outputs.get(presentation.outputId);
-    if (!state || !state.visible || state.activeOwner !== this.ownerId || state.patternId !== presentation.patternId || Date.now() - state.atMs > 3000 || state.width !== presentation.viewport.width || state.height !== presentation.viewport.height || state.devicePixelRatio !== presentation.viewport.devicePixelRatio) {
+    if (!state || !state.visible || state.activeOwner !== this.ownerId || state.patternId !== presentation.patternId || Date.now() - state.atMs > 3000 || state.width !== presentation.viewport.width || state.height !== presentation.viewport.height || state.devicePixelRatio !== presentation.viewport.devicePixelRatio || state.fullscreen !== presentation.fullscreen) {
       throw new Error('The projection output was hidden, disconnected or resized. Keep it fixed, then retry.');
     }
   }
