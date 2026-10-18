@@ -39,6 +39,33 @@ namespace ProjectionMapper.Sensor
 
     public static class FrameCodec
     {
+        private static bool Finite(double value) { return !Double.IsNaN(value) && !Double.IsInfinity(value); }
+        /** SDK results only: invalid camera samples become the agreed zero sentinel.
+         * Color outside its camera view is black; depth/XYZ remain usable for planes. */
+        public static void RegisterPixel(byte[] bgra, int colorWidth, int colorHeight, ushort[] depth,
+            byte[] rgb, float[] xyz, int pixel, float colorX, float colorY, float x, float y, float z)
+        {
+            int at = pixel * 3;
+            rgb[at] = rgb[at + 1] = rgb[at + 2] = 0;
+            xyz[at] = xyz[at + 1] = xyz[at + 2] = 0;
+            if (depth[pixel] == 0 || !Finite(x) || !Finite(y) || !Finite(z) || z <= 0 ||
+                Math.Abs(x) > 100 || Math.Abs(y) > 100 || z > 100) { depth[pixel] = 0; return; }
+            xyz[at] = x; xyz[at + 1] = y; xyz[at + 2] = z;
+            if (!Finite(colorX) || !Finite(colorY) || colorX < 0 || colorY < 0 || colorX >= colorWidth || colorY >= colorHeight) return;
+            int cx = Math.Min(colorWidth - 1, (int)Math.Floor(colorX + .5));
+            int cy = Math.Min(colorHeight - 1, (int)Math.Floor(colorY + .5));
+            int source = (cy * colorWidth + cx) * 4;
+            rgb[at] = bgra[source + 2]; rgb[at + 1] = bgra[source + 1]; rgb[at + 2] = bgra[source];
+        }
+        public static float[] NormalizeFloorPlane(float x, float y, float z, float w, double relativeAgeMs)
+        {
+            if (!Finite(x) || !Finite(y) || !Finite(z) || !Finite(w) || !Finite(relativeAgeMs) || Math.Abs(relativeAgeMs) > 250) return null;
+            double length = Math.Sqrt((double)x * x + (double)y * y + (double)z * z);
+            if (length < .000001) return null; // SDK zero/unavailable floor is not a measurement.
+            double distance = w / length;
+            if (!Finite(distance) || Math.Abs(distance) > 100) return null;
+            return new float[] { (float)(x / length), (float)(y / length), (float)(z / length), (float)distance };
+        }
         public static byte[] ToRgb(byte[] bgra)
         {
             if (bgra == null || bgra.Length % 4 != 0) throw new ArgumentException("BGRA pixels must be complete.");
@@ -53,13 +80,18 @@ namespace ProjectionMapper.Sensor
             for (int i = 0; i < depth.Length; i++) if (depth[i] < min || depth[i] > max) depth[i] = 0;
         }
         public static byte[] Encode(string metadata, byte[] rgb, ushort[] depth)
+        { return Encode(metadata, rgb, depth, null); }
+        public static byte[] Encode(string metadata, byte[] rgb, ushort[] depth, float[] cameraPoints)
         {
             byte[] json = new UTF8Encoding(false, true).GetBytes(metadata);
-            if (json.Length > 1024 * 1024 || rgb.Length + (long)depth.Length * 2 > 12 * 1024 * 1024)
+            if (cameraPoints != null && cameraPoints.Length != (long)depth.Length * 3) throw new ArgumentException("XYZ must have three values per depth pixel.");
+            if (cameraPoints != null) foreach (float value in cameraPoints) if (!Finite(value) || Math.Abs(value) > 100) throw new ArgumentException("XYZ must use bounded finite meters or the zero sentinel.");
+            if (json.Length > 1024 * 1024 || rgb.Length + (long)depth.Length * 2 + (cameraPoints == null ? 0 : (long)cameraPoints.Length * 4) > 12 * 1024 * 1024)
                 throw new ArgumentException("Frame exceeds the PMF1 size limit.");
             using (MemoryStream stream = new MemoryStream()) using (BinaryWriter writer = new BinaryWriter(stream)) {
                 writer.Write(Encoding.ASCII.GetBytes("PMF1")); writer.Write((uint)json.Length); writer.Write(json); writer.Write(rgb);
                 foreach (ushort value in depth) writer.Write(value);
+                if (cameraPoints != null) foreach (float value in cameraPoints) writer.Write(value);
                 return stream.ToArray();
             }
         }
@@ -69,6 +101,25 @@ namespace ProjectionMapper.Sensor
             uint length = (uint)packet.Length;
             byte[] prefix = { (byte)length, (byte)(length >> 8), (byte)(length >> 16), (byte)(length >> 24) };
             output.Write(prefix, 0, prefix.Length); output.Write(packet, 0, packet.Length); output.Flush();
+        }
+    }
+
+    /** Throttle expensive conversion, not the SDK's capture clock or USB acquisition. */
+    public sealed class CaptureCadence
+    {
+        private readonly double intervalMs;
+        private double last = Double.NegativeInfinity;
+        public CaptureCadence(double fps)
+        {
+            if (Double.IsNaN(fps) || Double.IsInfinity(fps) || fps <= 0 || fps > 30) throw new ArgumentException("Invalid processed frame rate.");
+            intervalMs = 1000 / fps;
+        }
+        public bool Take(double relativeMs)
+        {
+            if (Double.IsNaN(relativeMs) || Double.IsInfinity(relativeMs) || relativeMs < 0) throw new ArgumentException("Invalid source time.");
+            if (relativeMs < last) throw new InvalidOperationException("Sensor clock restarted.");
+            if (relativeMs - last < intervalMs) return false;
+            last = relativeMs; return true;
         }
     }
 

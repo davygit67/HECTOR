@@ -18,7 +18,8 @@ const operation = z.union([
   z.strictObject({ type: z.literal('composition.save'), name: z.string().min(1).max(80) }),
   z.strictObject({ type: z.enum(['composition.recall', 'composition.remove']), id }),
   z.strictObject({ type: z.literal('hardware.action'), command: z.union([
-    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'cancel-capture', 'clear-pattern', 'import-session', 'download-session']) }),
+    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'map-table', 'solve-surfaces', 'cancel-capture', 'clear-pattern', 'import-session', 'download-session']) }),
+    z.strictObject({ action: z.literal('use-surface'), candidateId: id, kind: z.enum(['table', 'wall']) }),
     z.strictObject({ action: z.literal('record'), seconds: z.number().int().min(1).max(30).nullable() }),
     z.strictObject({ action: z.enum(['open-session', 'remove-session']), id }),
     z.strictObject({ action: z.literal('configure'), settings: z.strictObject({ address: z.string().max(300).nullable(), resolution: z.enum(['1920x1080', '1280x720', '640x480']).nullable(), sequence: z.enum(['checks', 'gray']).nullable(), settleMs: z.union([z.literal(150), z.literal(300), z.literal(750), z.literal(1500)]).nullable(), outputTarget: z.enum(['demo', 'output']).nullable(), replayRate: z.union([z.literal(.25), z.literal(1), z.literal(2)]).nullable(), replayIndex: z.number().int().min(0).nullable() }) }),
@@ -47,7 +48,7 @@ export function createStudioTools(host: SceneToolHost, studio: StudioPort, repor
       execute: (input, options) => host.once('inspect_studio', input, options, () => studio.inspect()),
     }),
     operate_studio: tool({
-      description: 'Operate the interface: navigate inspectors/views; output window/fullscreen; video play/pause/seek/sound/retry/source window; import handoff; align/project; save/recall/remove compositions; hardware connect/record/replay/capture. Inspect IDs/status first. Play starts muted; unmute only on user request. File selection, account sign-in and browser fullscreen may require a user click; report handoff without claiming completion. Recall preserves current geometry and pauses media.',
+      description: 'Operate the interface: navigate inspectors/views; output window/fullscreen; video play/pause/seek/sound/retry/source window; import handoff; align/project; save/recall/remove compositions; hardware connect/record/replay/capture. Inspect IDs/status first. map-table captures/solves a stationary physical tabletop with live registered sensor and fullscreen output; solve-surfaces processes the selected completed capture; use-surface labels a candidate only after the user identifies it. No object/cylinder recognition or motion tracking. Inspect fresh mapping status after these actions; starting capture is not completion. Play starts muted; unmute only on user request. File selection, account sign-in and browser fullscreen may require a user click; report handoff without claiming completion. Recall preserves current geometry and pauses media.',
       strict: true, inputSchema: z.strictObject({ operation }),
       execute: (input, options) => host.once('operate_studio', input, options, async () => {
         let request: StudioOperation;

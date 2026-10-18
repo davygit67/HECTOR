@@ -76,7 +76,7 @@ test('assistant cannot invent an uploaded asset while presentation controls are 
     spec: { kind: 'media', config: { ...fixture.scene().contents[0].config, assetId: 'invented-file' } } });
   assert.deepEqual(fixture.scene(), before); assert.equal(fixture.commands.length, 0); assert.match(result.text, /could not|Could not/i);
   const bound = await bindCanvasTurn(fixture.port, { turnId: 'inspect', signal: new AbortController().signal });
-  assert.equal(Object.keys(bound.tools).length, 23);
+  assert.equal(Object.keys(bound.tools).length, 24);
   const schema = JSON.stringify(await asSchema(bound.tools.update_content.inputSchema).jsonSchema);
   assert.doesNotMatch(schema, /"const":"media"|"assetId"/);
   for (const type of ['media.seek', 'layer.configure', 'layer.reorder', 'display.configure']) assert.equal((AGENT_COMMAND_TYPES as readonly string[]).includes(type), true);

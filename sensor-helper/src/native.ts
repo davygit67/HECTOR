@@ -47,7 +47,9 @@ export function nativeSource(executable: string, options: { platform?: string; r
         const frame = decodeSensorFrame(bytes);
         if (frame.device.kind !== 'kinect-v2') throw new Error('Native helper did not identify a Kinect v2.');
         // A real decoded frame, not a native status by itself, promotes the source to streaming.
-        if (!streaming) { streaming = true; sink.status('streaming', 'Kinect v2 RGB and depth connected. Optical timing and registration still require hardware validation.'); }
+        if (!streaming) { streaming = true; sink.status('streaming', frame.device.colorRegistration === 'depth' && frame.cameraPoints
+          ? 'Kinect v2 registered RGB/depth/XYZ connected. Projector mapping, timing and physical accuracy still require validation.'
+          : 'Kinect v2 RGB and depth connected. This legacy stream has no registered XYZ for measured surface mapping.'); }
         sink.frame(frame); lastFrame = lastMessage = Date.now();
       });
       current.stdout.on('data', (chunk: Buffer) => { try { packets.push(chunk); } catch (error) { fail(`Invalid Kinect frame: ${String(error)}`); } });

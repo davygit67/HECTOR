@@ -28,7 +28,7 @@ The model is configurable. These limits bound individual requests, not total acc
 
 ## What the agent can do
 
-The full Studio integration exposes 28 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults.
+The full Studio integration exposes 29 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults.
 
 | Tools | Purpose |
 | --- | --- |
@@ -43,6 +43,7 @@ The full Studio integration exposes 28 tools. A basic snapshot/dispatch adapter 
 | `set_grid` | Calibration grid visibility |
 | `edit_scene`, `arrange_panel` | Exact or semantic layout, layers, timer settings, display, local-video seek, selection and explicit room/alignment controls |
 | `configure_media` | Existing local-media fit, loop, speed, audio, rotation, flips and color |
+| `fill_surface` | Solid fill/clear on an existing planar surface; explicit preview or physical target, with measured-source and live-sensor checks for physical output |
 | `operate_studio` | Navigation, output, native playback/source controls, import handoff, saved compositions and hardware actions |
 | `inspect_visual` | Actual revision-labeled rendered surface image, at most twice per turn |
 | `manage_memory` | Inspect, remember/edit, forget, clear, pause/resume learning |
@@ -73,6 +74,8 @@ Explicit preferences and tentative observed examples remain distinct. Retrieval 
 This is learning through saved evidence and retrieval, not model weight training or reinforcement learning. A single adjustment is not treated as a permanent general preference. The local file is bounded to 200 entries and 100 adjustment events. One trusted host process owns each memory file; its chat sessions share a per-path cache and serialized writer.
 
 Each model step refreshes authoritative state. Relevant tool groups are exposed first; `select_tools` can enable any category or the full set on the next step. Routine prompts omit unused geometric detail and specialized instructions; `inspect_room` retrieves full details. Whole-turn history is bounded to 28,000 characters and ten turns by default. Prior screenshot bytes are stripped from subsequent turns while tool receipts remain paired. Domain instructions are restored when matching tools are used.
+
+Measured-surface context always preserves per-surface provenance and concise calibration evidence. Dense coverage-mask pixels stay out of model context. `fill_surface` accepts an explicit `scene-preview` or `physical-surface` target; setting physical color requires a sensor-sourced measured surface, fresh live hardware, matching sensor identity and a valid current depth/output check. It never falls back to the simulator. Clearing a fill remains available after disconnect. `operate_studio` exposes `map-table`, `solve-surfaces` and user-confirmed `use-surface`; these invoke the canvas-owned solver rather than model-authored geometry. Fullscreen/candidate handoffs are unfinished work. Fixed-rig planar mapping does not implement semantic object recognition, curved-object masks or motion tracking. In particular, a request to color a Clorox cylinder must not color its supporting table instead. See [the object projection design](../CONTENT_ARCHITECTURE.md#physical-object-request-turn-the-clorox-cylinder-red).
 
 ## Visual inspection and experiences
 

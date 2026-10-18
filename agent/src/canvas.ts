@@ -12,6 +12,7 @@ import { DISPLAY_DEFAULTS, surfaceLayers } from '../../src/shared/layers.js';
 import { presentationContext } from './presentation.js';
 import type { StudioPort } from '../../src/shared/studio.js';
 import { createSceneTools } from './scene-tools.js';
+import { createSurfaceTools } from './surface-tools.js';
 import { createStudioTools } from './studio-tools.js';
 import { createMemoryTools } from './memory-tools.js';
 import { createExperienceTools } from './experiences.js';
@@ -28,7 +29,10 @@ export function roomContext(snapshot: Snapshot, youtubeSearch = false) {
   if (s.schemaVersion !== 3) throw new Error('The agent requires a canvas snapshot migrated to scene schema v3.');
   return {
     schemaVersion: s.schemaVersion, revision: s.revision, geometryRevision: s.geometryRevision,
-    frame: s.frame, surfaces: s.surfaces, projectors: s.projectors, viewer: s.viewer,
+    frame: s.frame, surfaces: s.surfaces.map(({ measurement, ...surface }) => ({ ...surface,
+      ...(measurement ? { measurement: { sessionId: measurement.sessionId, sensorId: measurement.sensorId, capturedAtMs: measurement.capturedAtMs, source: measurement.source,
+        rmsPx: measurement.rmsPx, correspondences: measurement.correspondences, floorAligned: measurement.floorAligned,
+        coverage: 'Conservative measured mask enforced by the renderer; raw mask pixels omitted from agent context.' } } : {}) })), projectors: s.projectors, viewer: s.viewer,
     coverage: s.coverage, selectedSurfaceId: s.selectedSurfaceId, selectedTimerId: s.selectedTimerId,
     timers: s.timers, showGrid: s.showGrid,
     contents: s.contents, selectedContentId: s.selectedContentId,
@@ -51,17 +55,21 @@ export function roomContext(snapshot: Snapshot, youtubeSearch = false) {
       localMedia: { uploadThroughTools: false, createOrReplaceThroughTools: false,
         existingItems: 'Inspect, rename, attach and remove user-uploaded media. Existing local videos support explicit start/pause/reset. File availability, decoded frames and visible playback are not verified by a scene snapshot.' },
       layerAndDisplayControls: 'edit_scene controls layer order, visibility, lock, opacity, display quality/brightness/blackout and exact layout. arrange_panel offers semantic anchors. configure_media edits imported media presentation. Native boundaries remain enforced.',
+      surfaceFill: 'fill_surface sets solid color on existing planar surfaces. Physical targets require sensor-measured mapping and fresh live hardware. No object recognition, curved mapping or continuous tracking.',
       videoBacklight: { defaults: BACKLIGHT_DEFAULTS, limits: BACKLIGHT_LIMITS, toneProfiles: BACKLIGHT_TONE_PROFILES,
         roomFill: 'Continuous 0–1 control: 0 is a normal local halo, 1 extends the same video light field across all scene surfaces. Intermediate values progressively expand reach. Surface boundaries, exclusions, timers and foreground panels remain protected. Adds no assets and changes no content placement.',
         aiRole: 'Select tone and style from conversational intent. Local algorithms adapt actual frame colors; no video frames or per-frame inference reach the agent.' },
-      unavailable: [...(youtubeSearch ? [] : ['YouTube search']), 'retired built-in matrix/ripple demo', 'general web search', 'weather', 'calendar', 'live recipe retrieval', 'generated images/video', 'voice', 'Kinect/motion games', 'arbitrary game code'],
+      unavailable: [...(youtubeSearch ? [] : ['YouTube search']), 'retired built-in matrix/ripple demo', 'general web search', 'weather', 'calendar', 'live recipe retrieval', 'generated images/video', 'voice', 'Kinect/motion games', 'arbitrary game code', 'semantic physical-object recognition/selection', 'curved-object projection', 'continuous object tracking'],
     },
   };
 }
 
 const INSTRUCTIONS = `You operate Projection Mapper through its existing surface canvas.
 The room snapshot is the authority. Use its surface, timer and content IDs, including for follow-up requests.
-Scene provenance is simulated. Do not describe this room as physically measured or hardware-calibrated.
+Read per-surface provenance and measurement source. A mixed scene contains both measured and simulated geometry; synthetic captures are still simulated. Sensor-measured planar mapping is a fixed-rig fit, not proof of current physical alignment, a solved 3D projector pose or tracking.
+For a physical table color request use fill_surface with target=physical-surface. If it is still simulated, inspect_studio; when a live sensor and output are ready, use operate_studio hardware.action map-table, then inspect fresh state before filling. If hardware is absent or mapping asks for a fullscreen click or candidate selection, report the handoff. Never use scene-preview as an automatic fallback. Use scene-preview for explicitly simulated/virtual edits only. Solid color needs no video generation, artwork preset or extra asset.
+Map-table can automatically accept only a unique measured horizontal table candidate. For ambiguous planes, ask the user to identify the candidate; use-surface requires that explicit selection, never guessed labels. Keep sensor, projector and surface stationary throughout capture and projection; moving them requires recalibration.
+Individual objects are not supported by the current planar-surface tools. For example, turning a Clorox wipes cylinder red requires identifying that object, its measured curved surface/mask and projector visibility. Never color the table, add a rectangle, rename a surface or assert live tracking as a substitute. Explain the missing object capability and keep that requested outcome unfinished. inspect_visual is a rendered preview, not a Kinect camera observation.
 Choose an existing surface; the canvas creates and attaches panels within its intrinsic boundary and exclusions.
 Ordinary creation uses surface handles without coordinates. For requested layout/alignment edits, use existing geometry and normalized bounds through the corresponding tools. Do not invent a second room model or a physical calibration solution.
 Panels may overlap other assets. The canvas prefers open space and can overlap when needed, while enforcing surface boundaries and exclusions. Do not report a visually crowded surface as full solely because panels overlap.
@@ -239,6 +247,7 @@ export async function bindCanvasTurn(canvas: CanvasPort, context: { turnId: stri
       }),
     }),
     ...createSceneTools({ canvas, dispatch, once }),
+    ...createSurfaceTools({ canvas, dispatch, once }),
     ...(canvas.studio ? createStudioTools({ canvas, dispatch, once }, canvas.studio, feedback.recordMessage) : {}),
     ...(services.memory ? createMemoryTools({ canvas, dispatch, once }, services.memory, services.roomId ?? 'local-room', feedback.recordMessage) : {}),
     ...createExperienceTools({ canvas, dispatch, once }, canvas.studio, feedback.recordMessage),

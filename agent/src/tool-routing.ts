@@ -3,7 +3,7 @@ import { z } from 'zod';
 const groups = {
   timers: ['create_timer', 'control_timer', 'attach_timer', 'edit_scene', 'arrange_panel'],
   content: ['create_note', 'create_recipe', 'create_artwork', 'create_reaction_game', 'update_content', 'control_content', 'attach_content', 'remove_content', 'arrange_panel'],
-  layout: ['edit_scene', 'arrange_panel', 'set_grid', 'inspect_visual'],
+  layout: ['edit_scene', 'arrange_panel', 'set_grid', 'fill_surface', 'operate_studio', 'inspect_visual'],
   media: ['search_youtube', 'display_youtube', 'set_youtube_backlight', 'configure_video_backlight', 'configure_media', 'update_content', 'control_content', 'attach_content', 'remove_content', 'operate_studio', 'inspect_visual'],
   studio: ['operate_studio', 'inspect_visual', 'edit_scene'],
   memory: ['manage_memory'],
@@ -17,6 +17,7 @@ export function createToolSelector(prompt: string) {
   if (/timer|countdown|minute|second/i.test(prompt)) enabled.add('timers');
   if (/note|recipe|cook|\bart\b|fish|\bstars?\b|aurora|game|background|create|put|place|add|remove|delete/i.test(prompt)) enabled.add('content');
   if (/move|resize|size|layout|position|align|calibrat|corner|layer|opacity|brightness|grid|projector|viewer|lock|hide|show/i.test(prompt)) enabled.add('layout');
+  if (/\b(fill|color|colour|red|green|blue)\b/i.test(prompt)) enabled.add('layout');
   if (/video|youtube|music|movie|backlight|glow|play|sound|source|saturat|volume|room fill|watch|media|image|file|lighting/i.test(prompt)) enabled.add('media');
   if (/window|fullscreen|output|preview|inspect|look|interface|hardware|sensor|record|session|capture|connect|replay|import|composition|save|recall|view/i.test(prompt)) enabled.add('studio');
   if (/remember|forget|memory|prefer|learn/i.test(prompt)) enabled.add('memory');

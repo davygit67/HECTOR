@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -43,6 +44,7 @@ namespace ProjectionMapper.Sensor
         {
             KinectSensor sensor = null;
             MultiSourceFrameReader reader = null;
+            BodyFrameReader bodyReader = null;
             LatestMailbox<byte[]> mailbox = new LatestMailbox<byte[]>();
             Thread writer = new Thread(delegate() {
                 try {
@@ -55,7 +57,20 @@ namespace ProjectionMapper.Sensor
                 while (!stopping && sensor == null) { sensor = KinectSensor.GetDefault(); if (sensor == null) Thread.Sleep(500); }
                 if (stopping) return;
                 sensor.Open(); reader = sensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Depth);
+                // Optional SDK gravity/floor estimate. Failure must not block registered RGB/XYZ.
+                if (Environment.GetEnvironmentVariable("PM_KINECT_FLOOR_PLANE") != "0") {
+                    try { bodyReader = sensor.BodyFrameSource.OpenReader(); } catch (Exception) { bodyReader = null; }
+                }
                 CaptureClock clock = new CaptureClock(); long sequence = 0;
+                JavaScriptSerializer frameJson = new JavaScriptSerializer(); // acquisition thread only
+                CaptureCadence cadence = new CaptureCadence(5);
+                const int colorWidth = 1920, colorHeight = 1080, depthWidth = 512, depthHeight = 424;
+                const int count = depthWidth * depthHeight;
+                // Reuse SDK/conversion buffers. Only encoded immutable packets enter the mailbox.
+                byte[] bgra = new byte[colorWidth * colorHeight * 4], rgb = new byte[count * 3];
+                ushort[] pixels = new ushort[count]; float[] xyz = new float[count * 3];
+                ColorSpacePoint[] colorPoints = new ColorSpacePoint[count];
+                CameraSpacePoint[] cameraPoints = new CameraSpacePoint[count];
                 bool hasStreamed = false; Stopwatch noFrames = Stopwatch.StartNew();
                 while (!stopping) {
                     if (!sensor.IsAvailable) {
@@ -75,28 +90,46 @@ namespace ProjectionMapper.Sensor
                         double receipt = UnixMs();
                         FrameTiming time = clock.Normalize(color.RelativeTime.TotalMilliseconds, depth.RelativeTime.TotalMilliseconds, receipt);
                         if (time == null) continue;
+                        noFrames.Restart();
+                        if (!cadence.Take(depth.RelativeTime.TotalMilliseconds)) continue;
                         var colorSize = color.FrameDescription; var depthSize = depth.FrameDescription;
                         if (colorSize.Width != 1920 || colorSize.Height != 1080 || depthSize.Width != 512 || depthSize.Height != 424)
                             throw new InvalidDataException("Unexpected Kinect v2 frame dimensions.");
-                        byte[] bgra = new byte[colorSize.Width * colorSize.Height * 4];
                         color.CopyConvertedFrameDataToArray(bgra, ColorImageFormat.Bgra);
-                        ushort[] pixels = new ushort[depthSize.Width * depthSize.Height]; depth.CopyFrameDataToArray(pixels);
+                        depth.CopyFrameDataToArray(pixels);
                         FrameCodec.KeepReliableDepth(pixels, depth.DepthMinReliableDistance, depth.DepthMaxReliableDistance);
+                        sensor.CoordinateMapper.MapDepthFrameToColorSpace(pixels, colorPoints);
+                        sensor.CoordinateMapper.MapDepthFrameToCameraSpace(pixels, cameraPoints);
+                        for (int i = 0; i < count; i++) FrameCodec.RegisterPixel(bgra, colorWidth, colorHeight, pixels, rgb, xyz, i,
+                            colorPoints[i].X, colorPoints[i].Y, cameraPoints[i].X, cameraPoints[i].Y, cameraPoints[i].Z);
+                        float[] floor = null;
+                        if (bodyReader != null) {
+                            try {
+                                using (BodyFrame body = bodyReader.AcquireLatestFrame()) {
+                                    if (body != null) { var p = body.FloorClipPlane;
+                                        floor = FrameCodec.NormalizeFloorPlane(p.X, p.Y, p.Z, p.W,
+                                            body.RelativeTime.TotalMilliseconds - depth.RelativeTime.TotalMilliseconds); }
+                                }
+                            } catch (Exception) { bodyReader.Dispose(); bodyReader = null; }
+                        }
                         double exposure = color.ColorCameraSettings.ExposureTime.TotalMilliseconds;
-                        string metadata = new JavaScriptSerializer().Serialize(new {
-                            device = new { id = sensor.UniqueKinectId, label = "Kinect v2 RGB + depth", kind = "kinect-v2",
-                                color = new { width = colorSize.Width, height = colorSize.Height }, depth = new { width = depthSize.Width, height = depthSize.Height },
-                                depthScaleMeters = 0.001, colorIntrinsics = (object)null, depthIntrinsics = (object)null, depthToColor = (object)null },
-                            sequence = sequence++, capturedAtMs = time.CapturedAtMs,
-                            exposureMs = exposure, clockUncertaintyMs = time.ClockUncertaintyMs
-                        });
-                        if (!hasStreamed) { Status("streaming", "Kinect RGB + depth connected. Timing is estimated; camera registration is not calibrated."); hasStreamed = true; }
-                        mailbox.Put(FrameCodec.Encode(metadata, FrameCodec.ToRgb(bgra), pixels)); noFrames.Restart();
+                        var metadata = new Dictionary<string, object> {
+                            { "device", new { id = sensor.UniqueKinectId, label = "Kinect v2 registered RGB + XYZ", kind = "kinect-v2",
+                                color = new { width = depthWidth, height = depthHeight }, depth = new { width = depthWidth, height = depthHeight },
+                                colorRegistration = "depth", depthScaleMeters = 0.001, colorIntrinsics = (object)null, depthIntrinsics = (object)null, depthToColor = (object)null } },
+                            { "sequence", sequence++ }, { "capturedAtMs", time.CapturedAtMs },
+                            { "exposureMs", exposure }, { "clockUncertaintyMs", time.ClockUncertaintyMs },
+                            { "cameraPointsFormat", "xyz-f32-le" }
+                        };
+                        if (floor != null) metadata.Add("floorPlane", floor);
+                        if (!hasStreamed) { Status("streaming", "Kinect SDK-registered RGB/depth/XYZ connected at up to 5 processed fps. Floor is optional; projector mapping and physical accuracy still require validation."); hasStreamed = true; }
+                        mailbox.Put(FrameCodec.Encode(frameJson.Serialize(metadata), rgb, pixels, xyz));
                     }
                 }
             } finally {
                 mailbox.Close();
                 if (reader != null) reader.Dispose();
+                if (bodyReader != null) bodyReader.Dispose();
                 if (sensor != null) sensor.Close();
                 writer.Join(250);
             }

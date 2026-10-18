@@ -4,6 +4,12 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Measured table and object-projection foundation — October 17, in progress
+
+Canvas owns registered sensor schema, Gray-code solve/plane candidates, measured masks/output/UI and surface.fill; agent owns sensor-helper/native SDK acquisition and agent tools/context. Agent/helper implementation passes114agent tests,19helper tests and31actual C# shared-core checks, plus four real-model isolated fixture checks. Full agent exposes29tools/32canonical scene commands. Physical fill additionally requires matching active sensorId and canvas-computed validSurfaceIds; clearing remains available offline. Native SDK/USB and physical accuracy still require Windows qualification. Integration and publication remain coordinated with the canvas task's active work; no cross-owner staging or runtime restart.
+
+The user's Clorox-cylinder request is a distinct next capability: semantic object identity, measured curved shape/projector visibility and local tracking. The present planar fill cannot fulfill it and the agent must leave it unfinished rather than coloring the table. See the [object projection design](../CONTENT_ARCHITECTURE.md#physical-object-request-turn-the-clorox-cylinder-red) and each owner's latest status. The old milestones below remain historical evidence.
+
 ## Whole-request agent review — October 17
 
 The agent now tracks multipart outcomes through a structured completion review and continues supported pending work within one shared request budget. Accepted edits stay grounded in canonical receipts; unsupported assets and user handoffs remain explicit in the reply/status. Global subject-honesty constraints are retained for unfamiliar requested visuals. Full tool count is28; scene commands remain31. Validation:105agent checks and two final real OpenAI synthetic compositions pass. Custom figurative animation/poster generation remains unavailable. Agent-owned publication is coordinated with the concurrent canvas YouTube-controls work; neither task stages the other's files. See current owner notes for activation/publication.

@@ -16,6 +16,11 @@ export function createCanvasFeedback(initial: Scene) {
   const name = (surfaceId: string) => scene.surfaces.find(surface => surface.id === surfaceId)?.name ?? surfaceId;
 
   function describeChange(command: Command): string {
+    if (command.type === 'surface.fill') {
+      const surface = scene.surfaces.find(s => s.id === command.id);
+      const measured = surface?.provenance === 'measured' && surface.measurement?.source === 'sensor';
+      return `${surface?.name ?? command.id}: ${surface?.fill ? `solid color set to ${surface.fill}` : 'solid fill removed'}. ${measured ? 'Uses the measured planar mapping; keep the surface, sensor and projector stationary. Physical alignment and color are not verified.' : 'This is a simulated surface change, not measured physical projection.'}${scene.display?.blackout || scene.display?.brightness === 0 ? ' Output is currently dark.' : ''}`;
+    }
     if (command.type === 'content.move' || command.type === 'timer.move') {
       const item = [...scene.contents, ...scene.timers].find(i => i.id === command.id);
       return item ? `Adjusted ${JSON.stringify(item.title)} on ${name(item.surfaceId)}; accepted placement and size are within its surface.` : 'The panel no longer exists.';

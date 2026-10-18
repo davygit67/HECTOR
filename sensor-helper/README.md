@@ -2,7 +2,7 @@
 
 This is the local bridge between the Xbox One Kinect (Kinect v2) and the existing Projection Mapper browser app. It has a Windows SDK capture executable and a portable Node relay. The relay also runs demo and recorded data through the same WebSocket connection. It does not introduce a second canvas, AI agent or recording format.
 
-**Current verification:** the portable relay builds, 18 integration tests pass, and 14 checks against the actual C# shared code pass on the development Mac. The native C# encoder's binary output is decoded by the app's canonical TypeScript decoder in those tests. The existing browser received demo/replay frames and correctly handled helper shutdown. The SDK-specific Windows executable has not yet been compiled or run on Windows; no physical Kinect, USB bandwidth, frame timing or touch accuracy is claimed.
+**Current verification:** the portable relay builds, 19 integration tests pass, and 31 checks against the actual C# shared code pass on the development Mac. Both legacy and registered RGB/XYZ output from the native C# encoder are decoded by the app's canonical TypeScript decoder. The SDK-specific Windows executable has not yet been compiled or run on Windows by this task; no physical Kinect, USB bandwidth, frame timing, object tracking or touch accuracy is claimed.
 
 ## Try it now on Mac or Windows
 
@@ -51,9 +51,11 @@ If the SDK is installed elsewhere, run `Build-Kinect.ps1 -SdkDirectory "C:\your\
 ## What the helper does
 
 - Acquires paired RGB/depth through the Kinect SDK's `MultiSourceFrameReader`; rejects pairs whose source timestamps differ by more than 20 ms.
-- Preserves 1920×1080 RGB8 and 512×424 unsigned 16-bit depth. Raw depth is in millimeters; zero represents missing/unreliable depth. SDK BGRA is converted to RGB without a mirror or geometric transform.
+- Uses the SDK CoordinateMapper to register the original 1920×1080 color image onto the 512×424 depth grid. It sends 512×424 RGB8, unsigned 16-bit depth and XYZ float32 triples in Kinect camera-space meters. Raw depth is in millimeters; zero depth/zero XYZ triples represent missing or unreliable geometry. Color outside the color camera's view is black while valid depth/XYZ remain available. There is no image mirroring or invented camera geometry.
+- Reuses conversion/mapping buffers and limits expensive processing to at most 5 frames per second. This is a calibration acquisition target, not a verified throughput or a moving-object tracking rate. The SDK still captures normally; only processed output is throttled.
+- An independent optional BodyFrame reader supplies a normalized SDK floor plane when available within 250 ms of the depth exposure. Missing/stale/invalid floor is omitted; it never prevents RGB/XYZ acquisition. Set `PM_KINECT_FLOOR_PLANE=0` before starting to disable this optional reader. This does not send skeletons or create body interaction events.
 - Sends stable device identity, sequence, acquisition-time estimate and exposure duration using the canonical PMF1 envelope. Frame acquisition and output have a one-frame mailbox: stale pending frames are replaced, not queued indefinitely.
-- Keeps camera intrinsics and depth-to-color transform explicitly `null` until a verified conversion of the SDK calibration is implemented. Equal pixel indexes are **not** registered RGB/depth correspondences. No 3D coordinates are invented.
+- Keeps camera intrinsics and depth-to-color transform explicitly `null`; the SDK has already performed correspondence and camera-point conversion. New native frames declare `device.colorRegistration="depth"` and `cameraPointsFormat="xyz-f32-le"`. Only frames with this registration declaration share RGB/depth indexes. Legacy raw-RGB packets remain readable but cannot supply the new measured-geometry path.
 - Reports waiting, streaming, failure and replay completion separately. Receiving frames requires successfully decoded data. A device loss invalidates any pending capture. The native process is restarted after loss/failure; a stalled stream triggers recovery before the browser's five-second stale-frame deadline. A fatal browser connection error offers manual reconnect.
 - Binds only to IPv4 loopback, validates exact localhost studio Origin/Host, limits clients and message sizes, rejects client commands and drops frames for backed-up viewers. It sends no camera data to a cloud service. The default source is live; failure never switches silently to demo.
 
@@ -63,7 +65,7 @@ The normal browser app at `http://127.0.0.1:5173` is the supported client. Elect
 
 Kinect frame times are relative. The initial adapter estimates a Unix clock offset from the earliest observed delivery delay and uses a conservative **250 ms uncertainty plus half the RGB/depth skew**. This is an estimate, not a measured latency bound or proof of exposure synchronization. USB/driver buffering and projector latency must be measured with the actual setup. Begin with generous pattern settling and inspect the collected images.
 
-The current work prepares RGB/depth acquisition, not calibrated touch or skeleton interaction. IR/body streams, tracking confidence and coordinate-conversion metadata need a versioned extension when implemented. They must preserve separate source timestamps, units and provenance. Body tracking should feed local interaction events; it should not call a cloud model on every frame.
+The current work supplies registered geometry for fixed-rig calibration. The app can use a settled Gray-code capture to solve planar surface correspondences. This helper does not identify a Clorox container, segment a curved object, solve the projector pose, track object motion, or provide calibrated touch/skeleton interaction. Those require additional local perception, object masks, projector visibility and tracking confidence. A saved table-plane fit cannot map a cylinder or follow a moving container. The agent must not invent or relabel geometry to bridge those gaps.
 
 ## Developer checks
 
@@ -73,15 +75,15 @@ npm ci
 npm run check
 ```
 
-By default the test requiring a C# output fixture is explicitly skipped if none is supplied. On a Mac with .NET 8 installed, run:
+By default the two tests requiring C# output fixtures are explicitly skipped if none is supplied. On a Mac with .NET 8 installed, run:
 
 ```sh
-dotnet run --project native/tests/CoreTests.csproj -- /tmp/pm-native-fixture.bin
-PM_NATIVE_FIXTURE=/tmp/pm-native-fixture.bin npm run check
+dotnet run --project native/tests/CoreTests.csproj -- /tmp/pm-native-fixture.bin /tmp/pm-native-registered.bin
+PM_NATIVE_FIXTURE=/tmp/pm-native-fixture.bin PM_NATIVE_REGISTERED_FIXTURE=/tmp/pm-native-registered.bin npm run check
 ```
 
-`Test-Kinect.ps1` supplies this fixture automatically on Windows. Transport tests use temporary loopback ports and simulated child processes; no existing studio, user scene or physical camera is touched. They cover framing fragmentation/limits, exact-origin restrictions, ordered demo frames, replay timing/completion/restart, long-gap heartbeat, invalid input, bounded slow-client behavior, missing-platform reporting, child failure recovery, ordered native status/frame delivery, rejection of late frames after retirement, and cross-language decoding.
+`Test-Kinect.ps1` supplies both fixtures automatically on Windows. Transport tests use temporary loopback ports and simulated child processes; no existing studio, user scene or physical camera is touched. They cover framing fragmentation/limits, exact-origin restrictions, ordered demo frames, replay timing/completion/restart, long-gap heartbeat, invalid input, bounded slow-client behavior, missing-platform reporting, child failure recovery, ordered native status/frame delivery, rejection of late frames after retirement, and cross-language RGB/depth/XYZ decoding. The shared C# tests also cover invalid registration clearing reused buffers, optional floor validation, throttling and XYZ byte order.
 
-Use `node sensor-helper/dist/cli.js --check` for a read-only platform/build report. `nativeBuilt` means a file exists; it does not prove a connected sensor. The remaining Windows acceptance checks are: native compilation, missing-device startup, actual RGB/depth reception, unplug/replug recovery, Configuration Verifier, sustained recording, and visible projector pattern capture. The calibration solver, surface extraction, measured-scene import and touch/body games are subsequent work.
+Use `node sensor-helper/dist/cli.js --check` for a read-only platform/build report. `nativeBuilt` means a file exists; it does not prove a connected sensor. The remaining Windows acceptance checks are: native compilation, missing-device startup, registered RGB/depth/XYZ reception, unplug/replug recovery, Configuration Verifier, sustained recording, and visible projector pattern capture. The canvas task owns the planar solver, extraction and measured-scene import; physical accuracy still needs measurement. Object selection, curved projection and touch/body games remain subsequent work.
 
-Implementation follows the [Microsoft Kinect stream API](https://github.com/Kinect/Docs/blob/master/Kinect4Windows2.0/k4w2/Programming_Guide/Kinect_API_Overview.md) and uses the existing [sensor contract](../SENSOR_CAPTURE.md) without changing PMF1/PMS1.
+Implementation follows the [Microsoft Kinect stream API](https://github.com/Kinect/Docs/blob/master/Kinect4Windows2.0/k4w2/Programming_Guide/Kinect_API_Overview.md) and the additive registered-geometry extension to the existing [sensor contract](../SENSOR_CAPTURE.md). PMF1 retains its magic/version and appends little-endian float32 XYZ after RGB/depth only when the header declares it; old packets remain unchanged. PMS1 stores those canonical frames.

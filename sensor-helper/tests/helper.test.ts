@@ -180,3 +180,17 @@ test('actual C# encoder fixture is accepted by the canonical TypeScript decoder'
     assert.equal(frame.sequence, 7); assert.deepEqual([...frame.color], [3,2,1,8,7,6]); assert.deepEqual([...frame.depth], [0,2200]);
   }); reader.push(bytes); reader.finish(); assert.equal(decoded, true);
 });
+
+test('actual C# registered RGB/XYZ fixture preserves geometry through app encoding', { skip: !process.env.PM_NATIVE_REGISTERED_FIXTURE }, async () => {
+  const bytes = await readFile(process.env.PM_NATIVE_REGISTERED_FIXTURE!); let decoded = false;
+  const reader = new PacketReader(packet => {
+    const frame = decodeSensorFrame(packet); decoded = true;
+    assert.equal(frame.device.colorRegistration, 'depth');
+    assert.deepEqual(frame.device.color, frame.device.depth);
+    assert.deepEqual([...frame.color], [0,0,0,8,7,6]);
+    assert.deepEqual([...frame.depth], [0,2200]);
+    assert.deepEqual([...frame.cameraPoints!], [0,0,0,-.25,.5,Math.fround(2.2)]);
+    assert.deepEqual(frame.floorPlane, [0,1,0,1.5]);
+    assert.deepEqual(decodeSensorFrame(encodeSensorFrame(frame)), { ...frame, color: new Uint8Array(frame.color) });
+  }); reader.push(bytes.subarray(0, 11)); reader.push(bytes.subarray(11)); reader.finish(); assert.equal(decoded, true);
+});

@@ -11,7 +11,7 @@ export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSe
   const { capabilities, ...state } = full;
   return {
     ...state,
-    surfaces: setup ? full.surfaces : full.surfaces.map(s => ({ id: s.id, name: s.name, boundary: s.boundary, holes: s.holes })),
+    surfaces: setup ? full.surfaces : full.surfaces.map(s => ({ id: s.id, name: s.name, kind: s.kind, provenance: s.provenance, fill: s.fill, measurement: s.measurement, boundary: s.boundary, holes: s.holes })),
     projectors: setup ? full.projectors : full.projectors.map(p => ({ id: p.id, enabled: p.enabled })),
     viewer: setup ? full.viewer : undefined, coverage: setup ? full.coverage : undefined,
     manualOutput: setup ? snapshot.scene.manualOutput : undefined,
@@ -19,7 +19,7 @@ export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSe
       maxTimers: capabilities.maxTimers, effect: false, intrinsicPlacement: true, placement: capabilities.placement,
       youtubeSearch, contentLimits: capabilities.contentLimits,
       contentRegistry: capabilities.contentRegistry.map(c => ({ kind: c.kind, description: c.description, actions: c.actions })),
-      localMedia: capabilities.localMedia, layerAndDisplayControls: capabilities.layerAndDisplayControls,
+      localMedia: capabilities.localMedia, layerAndDisplayControls: capabilities.layerAndDisplayControls, surfaceFill: capabilities.surfaceFill,
       videoBacklight: media ? capabilities.videoBacklight : undefined,
       unavailable: capabilities.unavailable,
     },
