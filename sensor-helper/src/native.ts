@@ -3,12 +3,14 @@ import { existsSync } from 'node:fs';
 import { decodeSensorFrame } from '../../src/shared/sensor.js';
 import { parseSensorBridgeStatus } from '../../src/shared/sensorBridge.js';
 import { PacketReader } from './protocol.js';
+import { RecoveryBackoff } from './recovery.js';
 import type { SourceFactory } from './types.js';
 
 export function nativeSource(executable: string, options: { platform?: string; retryMs?: number; watchdogMs?: number; launch?: () => ChildProcessWithoutNullStreams } = {}): SourceFactory {
   return sink => {
     let stopped = false, child: ChildProcessWithoutNullStreams | undefined, restart: ReturnType<typeof setTimeout> | undefined;
-    let lastMessage = Date.now(), lastFrame = Date.now(), streaming = false;
+    let lastMessage = performance.now(), lastFrame = performance.now(), streaming = false;
+    const backoff = new RecoveryBackoff(options.retryMs);
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let retire: ((message: string) => void) | undefined;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
@@ -21,9 +23,14 @@ export function nativeSource(executable: string, options: { platform?: string; r
     }
     const launch = () => {
       if (stopped) return;
-      streaming = false; lastMessage = lastFrame = Date.now();
+      streaming = false; lastMessage = lastFrame = performance.now();
       sink.status('waiting', 'Starting Kinect SDK. Waiting for a connected sensor…');
-      const current = (options.launch ?? (() => spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })))();
+      let current: ChildProcessWithoutNullStreams;
+      try { current = (options.launch ?? (() => spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })))(); }
+      catch (error) {
+        sink.status('waiting', `Kinect capture could not start; retrying: ${String(error).slice(0, 350)}`);
+        restart = setTimeout(launch, backoff.nextDelay()); return;
+      }
       child = current; let failed = false;
       const fail = (message: string) => {
         if (failed || stopped || child !== current) return;
@@ -37,7 +44,7 @@ export function nativeSource(executable: string, options: { platform?: string; r
         if (bytes.subarray(0, 4).toString('ascii') !== 'PMF1') {
           const status = parseSensorBridgeStatus(bytes.toString('utf8'));
           if (status.mode !== 'live') throw new Error('Unexpected native source mode.');
-          lastMessage = Date.now();
+          lastMessage = performance.now();
           if (streaming && status.state !== 'streaming') { fail(status.message); return; }
           if (status.state !== 'streaming' || streaming) {
             streaming = status.state === 'streaming'; sink.status(status.state, status.message);
@@ -50,7 +57,7 @@ export function nativeSource(executable: string, options: { platform?: string; r
         if (!streaming) { streaming = true; sink.status('streaming', frame.device.colorRegistration === 'depth' && frame.cameraPoints
           ? 'Kinect v2 registered RGB/depth/XYZ connected. Projector mapping, timing and physical accuracy still require validation.'
           : 'Kinect v2 RGB and depth connected. This legacy stream has no registered XYZ for measured surface mapping.'); }
-        sink.frame(frame); lastFrame = lastMessage = Date.now();
+        sink.frame(frame); backoff.frame(); lastFrame = lastMessage = performance.now();
       });
       current.stdout.on('data', (chunk: Buffer) => { try { packets.push(chunk); } catch (error) { fail(`Invalid Kinect frame: ${String(error)}`); } });
       current.stderr.setEncoding('utf8');
@@ -63,13 +70,13 @@ export function nativeSource(executable: string, options: { platform?: string; r
         if (stopped || child !== current) return;
         child = undefined; streaming = false; retire = undefined; clearTimeout(forceKill);
         sink.status('waiting', 'Kinect helper stopped. Reconnecting…');
-        restart = setTimeout(launch, options.retryMs ?? 2000);
+        restart = setTimeout(launch, backoff.nextDelay());
       });
     };
     launch();
     heartbeat = setInterval(() => {
       if (stopped) return;
-      const now = Date.now(), limit = options.watchdogMs ?? 3000;
+      const now = performance.now(), limit = options.watchdogMs ?? 3000;
       if (child && (now - lastMessage > limit || streaming && now - lastFrame > limit)) {
         retire?.('Kinect stopped responding. Restarting the capture helper…');
       } else if (!streaming) sink.status('waiting', 'Waiting for Kinect. Check its powered adapter and USB 3 connection.');

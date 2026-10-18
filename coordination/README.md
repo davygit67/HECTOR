@@ -4,6 +4,10 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Fixed-rig room reference and recovery — October 18, integration in progress
+
+Canvas owns the saved temporal metric reference, current roomModel/validSurfaceIds, browser reconnect, reference-bound planar solving and dispatch-time eligibility. Agent owns scan-room/forget-room adapters, physical-fill/reference checks and helper process/source recovery. Both preserve the reference across dropout; new physical actions wait for fresh compatibility. Fixed mounting is not projector calibration, and this slice does not recognize or track curved objects. No PMF1 change. Agent reports133checks/build and23helperchecks/build, including existing C#encoder fixtures; an actual OpenAI isolated fixture follows scan -> map -> fill with honest physical limitations. Canvas integrated/browser verification is ongoing. Shared edits are active: defer sync/publication until agreed and preserve the live host/scene/player. See owner notes for final validation and activation.
+
 ## Generated programs and test/repair — October 18, published
 
 Canvas owns the new local QuickJS worker/runtime, program library, painting/input/UI and shared contracts; agent owns seven author/revise/test/inspect/apply/configure/rollback tools, model workflow/context and receipt checks. The full agent exposes36tools/32scene commands. Candidates are tested before separate revision-bound apply; failures get bounded repair, parameters can change without regenerating source, and source revisions preserve compatible controls and existing content placement. Explicit preview-only requests cannot apply. Scope is original procedural2D visuals and pointer/keyboard games, not image/video generation or physical Kinect interaction.

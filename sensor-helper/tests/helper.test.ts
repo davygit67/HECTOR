@@ -14,6 +14,7 @@ import { PacketReader } from '../src/protocol.js';
 import { allowedOrigin, startBridge } from '../src/server.js';
 import { demoSource, readRecording, replaySource } from '../src/sources.js';
 import { nativeSource } from '../src/native.js';
+import { RecoveryBackoff } from '../src/recovery.js';
 import type { Sink } from '../src/types.js';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -80,15 +81,74 @@ test('WebSocket rejects absent/foreign Origin and client write messages', async 
   const allowed = connect(bridge.port); await once(allowed, 'open');
   allowed.send('change source'); const [code] = await once(allowed, 'close'); assert.equal(code, 1008);
 });
-test('source startup failure stays observable and server shuts down cleanly', async () => {
-  const bridge = await startBridge({ mode: 'live', source: () => { throw new Error('test failure'); }, port: 0 });
-  assert.equal(bridge.status.state, 'error'); assert.match(bridge.status.message, /test failure/); await bridge.stop();
+test('source startup failure stays observable while live recovery is pending and stop cancels retries', async () => {
+  let starts = 0;
+  const bridge = await startBridge({ mode: 'live', retryMs: 30, source: () => { starts++; throw new Error('test failure'); }, port: 0 });
+  assert.equal(bridge.status.state, 'waiting'); assert.match(bridge.status.message, /test failure/); await bridge.stop();
+  await pause(90); assert.equal(starts, 1);
 });
-test('invalid asynchronous source frame becomes status error, not process failure', async t => {
+test('invalid asynchronous live frame retires source and announces a waiting boundary', async t => {
   let sink!: Sink, stopped = false;
   const bridge = await startBridge({ mode: 'live', port: 0, source: s => { sink = s; s.status('streaming', 'test'); return { stop: () => { stopped = true; } }; } }); t.after(() => bridge.stop());
   sink.frame(syntheticFrame(0, Date.now()));
-  assert.equal(bridge.status.state, 'error'); assert.equal(stopped, true);
+  assert.equal(bridge.status.state, 'waiting'); assert.equal(stopped, true);
+});
+
+test('same WebSocket survives failed source recovery with a boundary before sequence zero and no retired callbacks', async t => {
+  const sinks: Sink[] = []; let stops = 0;
+  const bridge = await startBridge({ mode: 'live', port: 0, retryMs: 30, source: sink => {
+    sinks.push(sink); sink.status('streaming', 'test acquisition'); return { stop() { stops++; } };
+  } }); t.after(() => bridge.stop());
+  const socket = connect(bridge.port); t.after(() => socket.terminate());
+  const inbox = new SensorInbox(), events: string[] = [];
+  socket.on('message', (bytes, binary) => {
+    if (!binary) { const status = parseSensorBridgeStatus(bytes.toString()); events.push(status.state); if (status.state !== 'streaming') inbox.reset(); }
+    else { const frame = decodeSensorFrame(new Uint8Array(bytes as Buffer)); inbox.push(frame); events.push(`frame:${frame.sequence}`); }
+  });
+  await once(socket, 'open'); const frame = decodeSensorFrame(nativePacket().subarray(4));
+  sinks[0].frame(frame); await until(() => events.includes('frame:0'));
+  sinks[0].frame(frame); // Duplicate sequence retires this acquisition rather than replaying it.
+  await until(() => sinks.length === 2);
+  sinks[0].status('error', 'late retired status'); sinks[0].frame({ ...frame, sequence: 10 });
+  sinks[1].frame(frame); await until(() => events.filter(e => e === 'frame:0').length === 2);
+  assert.equal(socket.readyState, WebSocket.OPEN); assert.equal(stops, 1);
+  assert.equal(events.includes('error'), false); assert.equal(events.includes('frame:10'), false);
+  const first = events.indexOf('frame:0'), last = events.lastIndexOf('frame:0');
+  assert.ok(events.slice(first + 1, last).includes('waiting')); assert.equal(inbox.latest!.frame.sequence, 0);
+});
+
+test('live source factory throw recovers and synchronous failed source handle is retired exactly once', async t => {
+  let attempts = 0, stops = 0; const states: string[] = [];
+  const bridge = await startBridge({ mode: 'live', port: 0, retryMs: 10, onStatus: s => states.push(s.state), source: sink => {
+    attempts++;
+    if (attempts === 1) throw new Error('transient opening failure');
+    sink.status('streaming', 'test');
+    if (attempts === 2) sink.frame(syntheticFrame(0, Date.now()));
+    else sink.frame(decodeSensorFrame(nativePacket().subarray(4)));
+    return { stop() { stops++; } };
+  } }); t.after(() => bridge.stop());
+  await until(() => attempts === 3);
+  assert.equal(stops, 1); assert.equal(bridge.status.state, 'streaming');
+  assert.ok(states.filter(s => s === 'waiting').length >= 3);
+});
+
+test('recovery backoff is bounded and a single intermittent frame cannot reset a failure streak', () => {
+  const retry = new RecoveryBackoff(); assert.equal(retry.nextDelay(), 2000);
+  retry.frame(0); assert.equal(retry.nextDelay(), 4000);
+  retry.frame(0); retry.frame(500); retry.frame(1000); retry.frame(1500);
+  assert.equal(retry.nextDelay(), 8000); assert.equal(retry.nextDelay(), 10000);
+  for (let i = 0; i < 5; i++) retry.frame(i * 500);
+  assert.equal(retry.nextDelay(), 2000);
+});
+
+test('native synchronous launch failure retries and stop prevents later launches', async () => {
+  let launches = 0, frames = 0; const states: string[] = [], packet = nativePacket().toString('base64');
+  const source = nativeSource('unused', { retryMs: 15, launch: () => {
+    if (++launches === 1) throw new Error('temporary process launch failure');
+    return spawn(process.execPath, ['-e', `process.stdout.write(Buffer.from('${packet}','base64'));setInterval(()=>{},1000)`], { stdio: ['pipe','pipe','pipe'] });
+  } })({ status: state => states.push(state), frame: () => { frames++; } });
+  try { await until(() => frames === 1); } finally { source.stop(); }
+  await pause(60); assert.equal(launches, 2); assert.equal(states[0], 'waiting'); assert.ok(states.includes('streaming'));
 });
 test('backpressure skips surplus frames and sends only bounded in-flight work', async t => {
   let sink!: Sink;

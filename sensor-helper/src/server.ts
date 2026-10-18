@@ -5,6 +5,7 @@ import { encodeSensorFrame } from '../../src/shared/sensor.js';
 import { SensorInbox } from '../../src/shared/sensorStream.js';
 import { validateSensorBridgeStatus, type SensorBridgeStatus } from '../../src/shared/sensorBridge.js';
 import type { Mode, Source, SourceFactory } from './types.js';
+import { RecoveryBackoff } from './recovery.js';
 
 const DEFAULT_ORIGINS = ['http://127.0.0.1:5173', 'http://localhost:5173', 'http://[::1]:5173'];
 export function allowedOrigin(origin: string | undefined, allowed = DEFAULT_ORIGINS) {
@@ -20,12 +21,14 @@ export function permittedRequest(request: IncomingMessage, port: number, allowed
     request.url === '/' && allowedOrigin(request.headers.origin, allowed);
 }
 
-export async function startBridge(options: { mode: Mode; source: SourceFactory; port?: number; origins?: string[]; onStatus?: (s: SensorBridgeStatus) => void }) {
+export async function startBridge(options: { mode: Mode; source: SourceFactory; port?: number; origins?: string[]; retryMs?: number; onStatus?: (s: SensorBridgeStatus) => void }) {
   let state: SensorBridgeStatus = { protocol: 'pm-sensor', version: 1, type: 'status', mode: options.mode, state: 'starting', message: 'Starting sensor helper…' };
   const inbox = new SensorInbox();
   const http = createServer((_req, response) => { response.writeHead(404); response.end(); });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
   let source: Source | undefined, stopped = false;
+  let generation = 0, restart: ReturnType<typeof setTimeout> | undefined;
+  const backoff = new RecoveryBackoff(options.retryMs);
   const busy = new WeakSet<WebSocket>();
   let skippedFrames = 0, sentFrames = 0;
   function status(next: SensorBridgeStatus['state'], message: string) {
@@ -39,18 +42,25 @@ export async function startBridge(options: { mode: Mode; source: SourceFactory; 
     options.onStatus?.(state);
   }
   const start = () => {
-    if (source || stopped) return;
+    if (source || stopped || restart) return;
+    const currentGeneration = ++generation;
     let sourceFailed = false;
+    const current = () => !sourceFailed && !stopped && currentGeneration === generation;
     const fail = (error: unknown) => {
-      if (sourceFailed || stopped) return; sourceFailed = true;
-      status('error', `Sensor source failed: ${error instanceof Error ? error.message : String(error)}`);
-      source?.stop();
+      if (!current()) return; sourceFailed = true;
+      const previous = source; source = undefined;
+      status(options.mode === 'live' ? 'waiting' : 'error', `Sensor source failed${options.mode === 'live' ? '; reconnecting' : ''}: ${error instanceof Error ? error.message : String(error)}`);
+      try { previous?.stop(); } catch { /* Retirement must not prevent recovery. */ }
+      if (options.mode === 'live') restart = setTimeout(() => { restart = undefined; start(); }, backoff.nextDelay());
     };
-    try { source = options.source({ status, frame: frame => {
-      if (stopped || state.state !== 'streaming') return;
+    // Every new acquisition has an ordered boundary, including a synchronous
+    // factory that emits sequence zero before it returns its Source handle.
+    if (options.mode === 'live') status('waiting', 'Starting a fresh Kinect acquisition. Retained room geometry needs live verification.');
+    try { const started = options.source({ status: (next, message) => { if (current()) status(next, message); }, frame: frame => {
+      if (!current() || state.state !== 'streaming') return;
       try {
       if (options.mode === 'demo' && frame.device.kind !== 'synthetic' || options.mode === 'live' && frame.device.kind === 'synthetic') throw new Error('Sensor source kind does not match its mode.');
-      inbox.push(frame); const packet = encodeSensorFrame(frame);
+      inbox.push(frame); const packet = encodeSensorFrame(frame); backoff.frame();
       for (const socket of sockets.clients) {
         if (socket.readyState !== WebSocket.OPEN) continue;
         if (busy.has(socket) || socket.bufferedAmount !== 0) { skippedFrames++; continue; }
@@ -58,7 +68,8 @@ export async function startBridge(options: { mode: Mode; source: SourceFactory; 
       }
       } catch (error) { fail(error); }
     } });
-      if (sourceFailed) source.stop();
+      if (!current()) { try { started.stop(); } catch { /* A retired source has no live callbacks. */ } }
+      else source = started;
     } catch (error) { fail(error); }
   };
   http.on('upgrade', (request, socket, head) => {
@@ -87,7 +98,7 @@ export async function startBridge(options: { mode: Mode; source: SourceFactory; 
     get status() { return state; },
     get stats() { return { sentFrames, skippedFrames }; },
     async stop() {
-      if (stopped) return; stopped = true; source?.stop();
+      if (stopped) return; stopped = true; generation++; clearTimeout(restart); source?.stop(); source = undefined;
       for (const socket of sockets.clients) socket.terminate();
       await new Promise<void>(resolve => sockets.close(() => resolve()));
       await new Promise<void>(resolve => http.close(() => resolve()));

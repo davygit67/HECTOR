@@ -18,7 +18,7 @@ const operation = z.union([
   z.strictObject({ type: z.literal('composition.save'), name: z.string().min(1).max(80) }),
   z.strictObject({ type: z.enum(['composition.recall', 'composition.remove']), id }),
   z.strictObject({ type: z.literal('hardware.action'), command: z.union([
-    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'map-table', 'solve-surfaces', 'cancel-capture', 'clear-pattern', 'import-session', 'download-session']) }),
+    z.strictObject({ action: z.enum(['connect-demo', 'connect-live', 'disconnect', 'stop-recording', 'pause-replay', 'play-replay', 'capture', 'map-table', 'solve-surfaces', 'cancel-capture', 'clear-pattern', 'scan-room', 'forget-room', 'import-session', 'download-session']) }),
     z.strictObject({ action: z.literal('use-surface'), candidateId: id, kind: z.enum(['table', 'wall']) }),
     z.strictObject({ action: z.literal('record'), seconds: z.number().int().min(1).max(30).nullable() }),
     z.strictObject({ action: z.enum(['open-session', 'remove-session']), id }),
@@ -43,12 +43,12 @@ export function createStudioTools(host: SceneToolHost, studio: StudioPort, repor
   let observations = 0;
   return {
     inspect_studio: tool({
-      description: 'Read current interface view, source readiness/errors, available displays/assets/saved compositions and sensor state. Use before runtime operations. State does not prove physical projection.',
+      description: 'Read current interface view, source readiness/errors, available displays/assets/saved compositions and sensor state, including roomModel reference readiness and validSurfaceIds. Use before runtime operations. A saved reference or streaming sensor alone does not prove current mapping or physical projection.',
       strict: true, inputSchema: z.strictObject({}),
       execute: (input, options) => host.once('inspect_studio', input, options, () => studio.inspect()),
     }),
     operate_studio: tool({
-      description: 'Operate the interface: navigate inspectors/views; output window/fullscreen; video play/pause/seek/sound/retry/source window; import handoff; align/project; save/recall/remove compositions; hardware connect/record/replay/capture. Inspect IDs/status first. map-table captures/solves a stationary physical tabletop with live registered sensor and fullscreen output; solve-surfaces processes the selected completed capture; use-surface labels a candidate only after the user identifies it. No object/cylinder recognition or motion tracking. Inspect fresh mapping status after these actions; starting capture is not completion. Play starts muted; unmute only on user request. File selection, account sign-in and browser fullscreen may require a user click; report handoff without claiming completion. Recall preserves current geometry and pauses media.',
+      description: 'Operate the interface: navigate inspectors/views; output window/fullscreen; video play/pause/seek/sound/retry/source window; import handoff; align/project; save/recall/remove compositions; hardware connect/record/replay/capture. Inspect IDs/status first. scan-room saves a stable metric reference from fresh registered frames; it does not calibrate the projector. forget-room removes that reference only on explicit user reset, never as automatic recovery. Retain references across disconnects; wait for roomModel ready/canMap after reconnect. map-table captures/solves a stationary physical tabletop with a verified room reference, live registered sensor and fullscreen output; solve-surfaces processes the selected completed capture; use-surface labels a candidate only after the user identifies it. No object/cylinder recognition or motion tracking. Inspect fresh mapping status after these actions; starting capture is not completion. Play starts muted; unmute only on user request. File selection, account sign-in and browser fullscreen may require a user click; report handoff without claiming completion. Recall preserves current geometry and pauses media.',
       strict: true, inputSchema: z.strictObject({ operation }),
       execute: (input, options) => host.once('operate_studio', input, options, async () => {
         let request: StudioOperation;

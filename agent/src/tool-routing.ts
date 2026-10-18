@@ -21,6 +21,7 @@ export function createToolSelector(prompt: string) {
   if (/\b(fill|color|colour|red|green|blue)\b/i.test(prompt)) enabled.add('layout');
   if (/video|youtube|music|movie|backlight|glow|play|sound|source|saturat|volume|room fill|watch|media|image|file|lighting/i.test(prompt)) enabled.add('media');
   if (/window|fullscreen|output|preview|inspect|look|interface|hardware|sensor|record|session|capture|connect|replay|import|composition|save|recall|view/i.test(prompt)) enabled.add('studio');
+  if (/kinect|\b(scan|map|forget|reset)\b.*\b(room|reference|table)\b/i.test(prompt)) enabled.add('studio');
   if (/remember|forget|memory|prefer|learn/i.test(prompt)) enabled.add('memory');
   if (/experience|cinema|underwater|gallery|transform|cooking station|music room|tabletop target/i.test(prompt)) enabled.add('experiences');
   if (/program|procedural|custom|interactive|\bgame\b|animat|particle|leprechaun|clover|creature|border|draw|generat|\bcode\b|rollback/i.test(prompt)) enabled.add('programs');
