@@ -7,7 +7,7 @@ import { createOpenAIYouTubeSearch, type YouTubeSearch } from './youtube-search.
 
 export type ProjectionAgentOptions = { canvas: CanvasPort; youtubeSearch?: YouTubeSearch; memoryPath?: string; roomId?: string } & (
   | { config: AgentConfig; model?: never }
-  | { model: LanguageModel; config?: never; maxSteps?: number; maxOutputTokens?: number; timeoutMs?: number; historyTurns?: number }
+  | { model: LanguageModel; config?: never; maxSteps?: number; maxOutputTokens?: number; programMaxOutputTokens?: number; timeoutMs?: number; historyTurns?: number }
 );
 
 /** Inject the host's existing scene port. This factory never creates a scene store. */
@@ -19,6 +19,8 @@ export function createProjectionAgent(options: ProjectionAgentOptions) {
   const settings = options.config ? {
     model: createOpenAIModel(options.config), maxSteps: options.config.maxSteps,
     maxOutputTokens: options.config.maxOutputTokens, timeoutMs: options.config.timeoutMs, historyTurns: options.config.historyTurns,
+    programMaxOutputTokens: options.config.programMaxOutputTokens,
+    programReasoningEffort: options.config.programReasoningEffort,
   } : options;
   const session = createAgentSession({ ...settings, bindTurn: context => bindCanvasTurn(canvas, context, { youtubeSearch, videoSources, memory, roomId: options.roomId }) });
   return { memory, get busy() { return session.busy; }, send: session.send, cancel: session.cancel,

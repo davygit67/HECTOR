@@ -119,7 +119,7 @@ test('all expanded tools have strict OpenAI-compatible schemas, including runtim
     if (s.items) check(s.items); for (const option of s.anyOf ?? []) check(option);
   }
   for (const value of Object.values(bound.tools as ToolSet)) check(await asSchema(value!.inputSchema).jsonSchema);
-  assert.equal(Object.keys(bound.tools).length, 29);
+  assert.equal(Object.keys(bound.tools).length, 36);
 });
 test('OpenAI wire carries the actual preview as image input, then strips it from later turns', async () => {
   const fixture = studioFixture(); const bodies: any[] = [];

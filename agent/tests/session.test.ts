@@ -5,6 +5,23 @@ import { z } from 'zod';
 import { AgentTurnError, createAgentSession } from '../src/session.js';
 import { MockLanguageModelV4, textReply, toolReply } from './model.js';
 
+test('program authoring has an explicit bounded output budget without increasing ordinary replies', async () => {
+  let authoring = false;
+  const model = new MockLanguageModelV4({ doGenerate: [toolReply('choose', { authoring: true }), toolReply('choose', { authoring: false }), textReply('Finished')] });
+  const session = createAgentSession({ model, maxOutputTokens: 700, programMaxOutputTokens: 3300, programReasoningEffort: 'medium', bindTurn: async () => ({
+    tools: { choose: tool({ inputSchema: z.strictObject({ authoring: z.boolean() }), execute: async input => { authoring = input.authoring; return { ok: true }; } }) },
+    mayAuthorProgram: () => authoring, instructions: async () => 'Fixture authoring budget',
+  }) });
+  await session.send('Check budgets');
+  assert.deepEqual(model.doGenerateCalls.map(call => call.maxOutputTokens), [700, 3300, 700]);
+  assert.deepEqual(model.doGenerateCalls.map(call => call.providerOptions), [
+    { openai: { store: false, parallelToolCalls: false } },
+    { openai: { store: false, parallelToolCalls: false, reasoningEffort: 'medium' } },
+    { openai: { store: false, parallelToolCalls: false } },
+  ]);
+  assert.throws(() => createAgentSession({ model, programMaxOutputTokens: 16001, bindTurn: async () => ({ tools: {}, instructions: async () => '' }) }), /programMaxOutputTokens/);
+});
+
 test('SDK loop executes a tool, refreshes context, and returns usage and receipts', async () => {
   let value = 0;
   const model = new MockLanguageModelV4({ doGenerate: [toolReply('set_value', { value: 7 }), textReply('Changed.')] });

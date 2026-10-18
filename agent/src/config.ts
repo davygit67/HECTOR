@@ -7,6 +7,8 @@ export interface AgentConfig {
   model: string;
   maxSteps: number;
   maxOutputTokens: number;
+  programMaxOutputTokens?: number;
+  programReasoningEffort?: 'none' | 'low' | 'medium' | 'high';
   timeoutMs: number;
   historyTurns: number;
 }
@@ -27,11 +29,15 @@ export function readAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
   if (!apiKey || apiKey === 'replace-me') {
     throw new Error('Set OPENAI_API_KEY in agent/.env or the host process environment. Do not paste it into chat.');
   }
+  const programReasoningEffort = env.AGENT_PROGRAM_REASONING_EFFORT?.trim() || 'medium';
+  if (!['none', 'low', 'medium', 'high'].includes(programReasoningEffort)) throw new Error('AGENT_PROGRAM_REASONING_EFFORT must be none, low, medium or high.');
   return {
     apiKey,
     model: env.OPENAI_MODEL?.trim() || DEFAULT_MODEL,
     maxSteps: integer(env, 'AGENT_MAX_STEPS', 12, 1, 20),
     maxOutputTokens: integer(env, 'AGENT_MAX_OUTPUT_TOKENS', 1500, 128, 16000),
+    programMaxOutputTokens: integer(env, 'AGENT_PROGRAM_MAX_OUTPUT_TOKENS', 6000, 128, 16000),
+    programReasoningEffort: programReasoningEffort as AgentConfig['programReasoningEffort'],
     timeoutMs: integer(env, 'AGENT_TIMEOUT_MS', 90000, 1000, 120000),
     historyTurns: integer(env, 'AGENT_HISTORY_TURNS', 10, 1, 30),
   };

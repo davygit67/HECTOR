@@ -216,7 +216,7 @@ export function createContentTools(host: ContentToolHost) {
       }),
     }),
     update_content: tool({
-      description: 'Edit existing content. null preserves title/spec; non-null spec replaces the FULL config and must retain kind. Recipe config updates return to ingredients; artwork preserves its clock; game config requires idle (reset first only if the user wants to discard progress). YouTube video/start changes reload the player; use set_youtube_backlight for a lighting toggle or configure_video_backlight for lighting settings. Title-only edits preserve state. Uploaded media supports title-only edits here: keep spec null and use configure_media for presentation settings and operate_studio asset.import for a file-selection handoff.',
+      description: 'Edit existing content. null preserves title/spec; non-null spec replaces the FULL config and must retain kind. Recipe config updates return to ingredients; artwork preserves its clock; game config requires idle (reset first only if the user wants to discard progress). YouTube video/start changes reload the player; use set_youtube_backlight for a lighting toggle or configure_video_backlight for lighting settings. Title-only edits preserve state. Uploaded media and generated programs support title-only edits here: keep spec null. Use configure_media for media presentation; configure_program for program parameters or revise_program/test/apply for source changes. operate_studio asset.import opens a file-selection handoff.',
       strict: true,
       inputSchema: z.strictObject({ contentId, title: title.nullable(), spec: spec.nullable() }),
       execute: (input, options) => host.once('update_content', input, options, async () => {
@@ -231,7 +231,7 @@ export function createContentTools(host: ContentToolHost) {
       }),
     }),
     control_content: tool({
-      description: 'Control existing content using an action allowed by its registry entry: recipe next/previous/reset; artwork, game and already-uploaded local video start/pause/reset. Recipe navigation clamps at ingredients/last step. Art/video reset pauses at elapsed zero; game reset discards progress and returns to idle. Local video actions preserve media settings including mute/volume and do not verify file availability or visible playback. Notes, uploaded images and YouTube have no runtime actions here; use YouTube player controls for playback.',
+      description: 'Control existing content using an action allowed by its registry entry: recipe next/previous/reset; artwork, game, generated program and already-uploaded local video start/pause/reset. Recipe navigation clamps at ingredients/last step. Art/video/program reset pauses at elapsed zero; resetting a game/program discards its progress. Local video actions preserve media settings including mute/volume and do not verify file availability or visible playback. Program clock state does not verify runtime/render readiness. Notes, uploaded images and YouTube have no runtime actions here; use YouTube player controls for playback.',
       strict: true,
       inputSchema: z.strictObject({ contentId, action: actionSchema }),
       execute: (input, options) => host.once('control_content', input, options, async () => receiptFor(

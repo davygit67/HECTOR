@@ -13,6 +13,24 @@ const done = (id: string, request: string, evidence: string[]) => ({ id, request
 const pending = (id: string, request: string) => ({ id, request, status: 'pending', evidence: [], reason: 'Use the corresponding tool to complete this part.' });
 const review = (requirements: unknown[], id = 'review') => toolReply('review_request', { requirements }, id);
 
+test('a tested program candidate cannot satisfy a request to deploy it', async () => {
+  const r = createRequestReview('Create an interactive clover garden on the wall.');
+  r.state.recordStep({ calls: [{ toolName: 'author_program', toolCallId: 'candidate' }], results: [{ toolName: 'author_program', toolCallId: 'candidate', output: { ok: true, testId: 'passed-candidate', passed: true } }] });
+  assert.equal(r.state.required, true);
+  const first = await r.tools.review_request.execute!({ requirements: [{ id: 'garden', request: 'Place the interactive garden', status: 'completed', evidence: ['candidate'], reason: null }] }, { toolCallId: 'review-1', messages: [], context: {} });
+  assert.equal((first as { ok: boolean }).ok, false); assert.equal(r.state.complete, false);
+  r.state.recordStep({ calls: [{ toolName: 'apply_program', toolCallId: 'placed' }], results: [{ toolName: 'apply_program', toolCallId: 'placed', output: { ok: true, outcome: 'applied' } }] });
+  const second = await r.tools.review_request.execute!({ requirements: [{ id: 'garden', request: 'Place the interactive garden', status: 'completed', evidence: ['placed'], reason: null },
+    { id: 'preserve', request: 'Keep unrelated timer unchanged, as confirmed by the apply result', status: 'completed', evidence: ['placed'], reason: null }] }, { toolCallId: 'review-2', messages: [], context: {} });
+  assert.equal((second as { ok: boolean }).ok, true); assert.equal(r.state.complete, true);
+});
+
+test('standalone program inspection/testing does not demand a scene mutation', () => {
+  const r = createRequestReview('Check this program without applying it.');
+  r.state.recordStep({ calls: [{ toolName: 'test_program', toolCallId: 'test' }, { toolName: 'inspect_program', toolCallId: 'inspect' }], results: [] });
+  assert.equal(r.state.required, false);
+});
+
 test('an early text stop triggers whole-request review and continues supported work without replay', async () => {
   const f = canvasFixture();
   const model = new RawMockLanguageModelV4({ doGenerate: [

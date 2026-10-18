@@ -53,6 +53,7 @@ export function createCanvasFeedback(initial: Scene) {
       if (content.kind === 'note') return `Updated note on ${surface}: ${JSON.stringify(content.config.text)}`;
       if (content.kind === 'recipe') return `Updated recipe ${JSON.stringify(content.title)} on ${surface}; ${content.state.stepIndex < 0 ? 'showing ingredients' : `step ${content.state.stepIndex + 1} of ${content.config.steps.length}`}.`;
       if (content.kind === 'game') return `Updated pointer reaction game on ${surface}: ${content.state.status}, ${content.config.rounds} rounds, score ${content.state.score}.`;
+      if (content.kind === 'program') return `Generated program ${JSON.stringify(content.title)} on ${surface}: ${content.state.clock.running ? 'running in the scene' : 'paused'}. Source appearance, runtime readiness and physical output require their own checks.`;
       if (content.kind === 'media') {
         const action = command.type === 'content.attach' ? 'moved' : command.type === 'content.action'
           ? command.action === 'start' ? 'playback requested' : command.action === 'reset' ? 'reset and paused in the scene' : 'paused in the scene'
@@ -97,7 +98,7 @@ export function createCanvasFeedback(initial: Scene) {
       if (!changes.size && !failures.size && !messages.length) {
         if (searchResults.length) return 'Found YouTube videos; none have been placed yet:\n' + searchResults.map(result =>
           `${result.title}${result.channel ? ` — ${result.channel}` : ''}${result.metadataVerified ? '' : ' — title/channel metadata unavailable; playback unverified'}\n${result.url}`).join('\n\n');
-        return toolNames.some(toolName => !['inspect_room', 'search_youtube', 'inspect_studio', 'inspect_visual', 'manage_memory', 'list_experiences', 'select_tools'].includes(toolName))
+        return toolNames.some(toolName => !['inspect_room', 'search_youtube', 'inspect_studio', 'inspect_visual', 'inspect_program', 'test_program', 'manage_memory', 'list_experiences', 'select_tools'].includes(toolName))
           ? 'No canvas changes were confirmed. The requested action could not be applied.' : text;
       }
       const lines = [...changes.values()].map(describe);

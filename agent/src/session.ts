@@ -13,6 +13,8 @@ export interface TurnBinding {
   tools: ToolSet;
   instructions: () => Promise<string>;
   activeTools?: () => string[];
+  mayAuthorProgram?: () => boolean;
+  requiredTool?: () => string | undefined;
   review?: RequestReview;
   formatReply?: (reply: { text: string; toolNames: readonly string[] }) => string;
 }
@@ -22,6 +24,8 @@ export interface SessionOptions {
   bindTurn: (context: { turnId: string; signal: AbortSignal; prompt: string }) => Promise<TurnBinding>;
   maxSteps?: number;
   maxOutputTokens?: number;
+  programMaxOutputTokens?: number;
+  programReasoningEffort?: 'none' | 'low' | 'medium' | 'high';
   timeoutMs?: number;
   historyTurns?: number;
 }
@@ -67,10 +71,12 @@ export function createAgentSession(options: SessionOptions) {
   const turns: ModelMessage[][] = [];
   const maxSteps = options.maxSteps ?? 12;
   const maxOutputTokens = options.maxOutputTokens ?? 1500;
+  const programMaxOutputTokens = options.programMaxOutputTokens ?? 6000;
   const timeoutMs = options.timeoutMs ?? 90000;
   const historyTurns = options.historyTurns ?? 10;
   for (const [name, value, max] of [
     ['maxSteps', maxSteps, 20], ['maxOutputTokens', maxOutputTokens, 16000],
+    ['programMaxOutputTokens', programMaxOutputTokens, 16000],
     ['timeoutMs', timeoutMs, 120000], ['historyTurns', historyTurns, 30],
   ] as const) {
     if (!Number.isSafeInteger(value) || value < 1 || value > max) throw new Error(`Invalid ${name}.`);
@@ -114,10 +120,15 @@ export function createAgentSession(options: SessionOptions) {
             signal.throwIfAborted();
             const instructions = await abortable(binding.instructions(), signal);
             // Reserve the last available step for an honest partial-result review.
-            const mustReview = forceReview || (binding.review?.required && steps.length >= maxSteps - 1);
+            const requiredTool = binding.requiredTool?.();
+            const authoring = binding.mayAuthorProgram?.() === true;
+            const mustReview = (forceReview && !requiredTool) || (binding.review?.required && steps.length >= maxSteps - 1);
             forceReview = false;
             return mustReview ? { instructions, activeTools: ['review_request'], toolChoice: { type: 'tool' as const, toolName: 'review_request' } }
-              : { instructions, activeTools: binding.activeTools?.() };
+              : { instructions, activeTools: requiredTool ? [requiredTool] : binding.activeTools?.(),
+                ...(requiredTool ? { toolChoice: { type: 'tool' as const, toolName: requiredTool } } : {}),
+                ...(authoring && options.programReasoningEffort ? { providerOptions: { openai: { store: false, parallelToolCalls: false, reasoningEffort: options.programReasoningEffort } } } : {}),
+                maxOutputTokens: authoring ? programMaxOutputTokens : maxOutputTokens };
           },
           onToolExecutionStart: ({ toolCall }) => emit({ type: 'tool-start', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
           onToolExecutionEnd: ({ toolCall }) => emit({ type: 'tool-end', toolName: toolCall.toolName, toolCallId: toolCall.toolCallId }),
