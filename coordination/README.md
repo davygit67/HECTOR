@@ -4,11 +4,11 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
-## Generated programs and test/repair — October 18, publication coordination
+## Generated programs and test/repair — October 18, published
 
 Canvas owns the new local QuickJS worker/runtime, program library, painting/input/UI and shared contracts; agent owns seven author/revise/test/inspect/apply/configure/rollback tools, model workflow/context and receipt checks. The full agent exposes36tools/32scene commands. Candidates are tested before separate revision-bound apply; failures get bounded repair, parameters can change without regenerating source, and source revisions preserve compatible controls and existing content placement. Explicit preview-only requests cannot apply. Scope is original procedural2D visuals and pointer/keyboard games, not image/video generation or physical Kinect interaction.
 
-Agent reports129offline checks/build plus actual OpenAI animation, parameter follow-up, source follow-up and custom-game tests passing after repairing real-model failures. Canvas separately validates the worker, rendering, UI and input. Physical output and broad generation reliability remain unverified. Shared checkout is actively edited: defer incoming sync/Git mutations until the owners agree the publication window; neither task stages the other's files. Latest validation/activation details are in each owner's status note.
+Agent reports129offline checks/build plus actual OpenAI animation, parameter follow-up, source follow-up and custom-game tests passing after repairing real-model failures. Canvas reports203root tests, production/desktop build and28browser checks, plus actual UI click scoring and model-authored animation rendering. Agent `ed46fe0` and canvas `5c03b4f` are published on main; release note `0bb7d30` follows. Matching local/origin heads and clean checkout were independently checked, and guarded sync returned up-to-date. Publication hold is released; normal idle/clean synchronization resumes. Live previewPID27137 was retained. Physical output, native/Windows qualification and broad generation reliability remain unverified. Latest activation details are in each owner's status note.
 
 ## Measured table and object-projection foundation — October 17, published
 
