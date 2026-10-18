@@ -1,5 +1,11 @@
 # Canvas task status
 
+## Generative experiences initiative · October 18 · scoped only
+
+User requested an ambitious next-build scope for original images/video, arbitrary animation and new games. Added `GENERATIVE_EXPERIENCES_PLAN.md`: generated media plus isolated executable programs, versioned packages, durable jobs, offstage render/test/repair, editable parameters, additive insertion, shared spatial simulation and staged input qualification. Content / Agent layer reviewed current contracts and recommended waiting-for-job completion evidence, verified asset ingestion, bounded runtime ports and preserving existing content during insertion. Proposed first coding task is an end-to-end generated-program slice, followed by image/video integrations through the same package path; no runtime/source feature is claimed delivered.
+
+Reviewed current source and official OpenAI, Runway, Higgsfield and Electron documentation. Scope includes measurable delivery gates, provider comparisons and Windows performance qualification; exact models/budgets/contracts remain implementation decisions. No paid generation, new credentials, dependency installation, app restart, scene edits or playback actions. Incoming synchronization was deferred while the peer performed the requested read-only planning review. Publication for this task is limited to this owned status note and the new proposal.
+
 ## Kinect planar mapping + RTAB-Map adapter · October 17 · verified, publishing
 
 Added the stationary table workflow in the existing Hardware page. Registered RGB, SDK XYZ and optional floor data feed a worker that decodes Gray patterns, fits connected planes and projector homographies, and preserves observed coverage with a 96 × 96 mask. A unique horizontal table-height candidate can apply automatically; missing floor or ambiguity requires selection. Canonical measured surfaces preserve existing assets. Surface fill/clear has UI and agent controls. Fresh sensor identity, sparse saved depth and fullscreen output dimensions gate physical agent fills. Saved projection is not automatically blanked after sensor loss. Projector-only movement/internal keystone cannot be detected; keep the rig fixed and verify its footprint. Curved objects and live tracking remain unsupported.
