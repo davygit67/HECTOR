@@ -135,7 +135,7 @@ test('object capability context preserves explicit identity and loss/output limi
   }
   const bound = await bindCanvasTurn(fixture.port, { turnId: 'object-context', signal: new AbortController().signal, prompt: 'Turn the Clorox wipes cylinder red.' });
   const instructions = await bound.instructions();
-  assert.match(instructions, /USER must select the intended object/); assert.match(instructions, /no agent seed\/selection operation/);
+  assert.match(instructions, /USER must select the intended object/); assert.match(instructions, /No invented seed coordinates/);
   assert.match(instructions, /keep that requested outcome unfinished/); assert.match(instructions, /Never color the table, add a rectangle/);
   assert.match(instructions, /not hidden faces, fast movement or general 6DOF/);
 });

@@ -4,6 +4,10 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
+## Agent-guided object mapping refinement — October 18, integration validation
+
+User requests agent-callable object edges and mapping refinement, with inspection and iterative adjustments. Canvas owns paired camera/depth observations, measured candidates and bounded local selection/refinement/undo; agent implements two tools, observation-image handling, exact state/token checks, context and isolated workflow tests against agreed shared contracts. Agent reports 157 tests/typecheck/build and four actual OpenAI synthetic-port scenarios passing; the full integration now exposes 38 tools. Completion review links an exact post-edit comparison to its accepted action, while standalone inspection cannot prove an edit. Canvas reports 231 root tests/build, 15 isolated workshop assertions and 16 actual Hardware/Studio integration assertions. Those browser fixtures use analytic sensor input and explicitly simulate fullscreen; they do not qualify physical alignment. See [the workshop guide](../OBJECT_MAPPING_WORKSHOP.md). Existing hardware/output validity checks remain authoritative. Clean guarded sync completed before work; publication proceeds through separate owned-path windows after final checks. No live scene, player or host restart for testing.
+
 ## Selected curved object and slow movement — October 18, published
 
 Canvas owns 3D projector calibration, explicit RGB-click object selection, bounded observed-shape tracking and exclusive projector color masks with loss blanking. Agent implements compatible Studio actions/context/eligibility/feedback with 144 checks/build and five real OpenAI scenarios across isolated test runs; a discovered read-only completion-review bug was corrected and regression-tested. No semantic recognition, hidden-face reconstruction, general 6DOF tracking or helper protocol change is claimed.

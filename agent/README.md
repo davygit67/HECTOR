@@ -30,7 +30,7 @@ The model is configurable. These limits bound individual requests, not total acc
 
 ## What the agent can do
 
-The full Studio integration exposes 36 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations, including program authoring. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults. Offline program tests also use the canvas-owned QuickJS dependencies, so install the root package as described in the project setup first.
+The full Studio integration exposes 38 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations, including program authoring. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults. Offline program tests also use the canvas-owned QuickJS dependencies, so install the root package as described in the project setup first.
 
 | Tools | Purpose |
 | --- | --- |
@@ -48,6 +48,8 @@ The full Studio integration exposes 36 tools. A basic snapshot/dispatch adapter 
 | `fill_surface` | Solid fill/clear on an existing planar surface; explicit preview or physical target, with measured-source and live-sensor checks for physical output |
 | `operate_studio` | Navigation, output, native playback/source controls, import handoff, saved compositions and hardware actions |
 | `inspect_visual` | Actual revision-labeled rendered surface image, at most twice per turn |
+| `inspect_object_mapping` | Paired Kinect camera/depth, measured candidate outlines/bounds and separately labeled computed projector mask |
+| `refine_object_mapping` | Select a measured candidate; refine inward inset/feather and individual trim margins; undo/reset with exact observation and revision |
 | `manage_memory` | Inspect, remember/edit, forget, clear, pause/resume learning |
 | `list_experiences`, `apply_experience` | Adaptable room experiences through atomic canonical commands |
 | `author_program`, `revise_program`, `test_program` | Write and test original bounded 2D animation/game code without changing live content |
@@ -62,8 +64,13 @@ Examples:
 - “Remember that I prefer gentle lighting for movies.”
 - “Set up the underwater experience on the wall and table.”
 - “Save this composition as Movie night.”
+- “Inspect the selected container and tighten its outline by one mask cell.”
+- “Soften that edge, trim only the left side by 10%, and inspect it again.”
+- “Undo the last mapping adjustment, keeping its color and selection.”
 
-File selection, browser fullscreen permissions and account sign-in may require a user action. Handoffs are reported as pending, never as completed uploads or authentication. Sensor operations expose the implemented acquisition/replay controls; they do not create body tracking, touch calibration or a physical geometry solution. Game scores are not injected by the agent. The retired matrix/ripple demo cannot return.
+File selection, browser fullscreen permissions and account sign-in may require a user action. Handoffs are reported as pending, never as completed uploads or authentication. Sensor operations expose acquisition/replay, measured calibration and the bounded object workflow; body tracking and touch calibration remain unavailable. Game scores are not injected by the agent. The retired matrix/ripple demo cannot return.
+
+Object workshopping requires a live registered sensor, measured tabletop and, for selection/refinement, the current 3D projector calibration. Each change uses a fresh observation token/revision, and the host revalidates geometry at application. Up to four edits and six inspections are allowed per request. The agent must inspect again after an edit; missing evidence for the exact resulting object/settings leaves the turn incomplete. Inset/feather are projector-mask cells (see reported scale), and trims are fractions of measured camera bounds. These controls only remove light inside measured geometry; they cannot translate masks into unseen pixels or automatically prove optical alignment. Candidate names are visual interpretations, not a brand detector. Ambiguity requires user identification; older hosts without this inspection method use the camera-click workflow. No live camera image is retained in later-turn model history. See [the physical setup guide](../CURVED_OBJECTS_V1.md).
 
 After attempted actions, a model text stop alone cannot complete the request. A structured review must account for the original prompt, with stable requirement IDs and actual successful action receipts for completed outcomes. Searches, failed actions and import handoffs cannot establish completion. Pending supported work continues within the same total step/time budget without replaying accepted changes. Blocked/awaiting-user items appear alongside the deterministic accepted-state summary, and the overall status is incomplete. The final available step is reserved for review when possible. No review means no complete status. Questions and read-only inspection keep their normal answer flow.
 

@@ -15,6 +15,7 @@ export interface TurnBinding {
   activeTools?: () => string[];
   mayAuthorProgram?: () => boolean;
   requiredTool?: () => string | undefined;
+  verificationPending?: () => boolean;
   review?: RequestReview;
   formatReply?: (reply: { text: string; toolNames: readonly string[] }) => string;
 }
@@ -145,7 +146,7 @@ export function createAgentSession(options: SessionOptions) {
           forceReview = true;
           result = await abortable(run(), signal);
         }
-        const status = binding.review?.required ? (binding.review.complete ? 'complete' : 'incomplete')
+        const status = binding.verificationPending?.() ? 'incomplete' : binding.review?.required ? (binding.review.complete ? 'complete' : 'incomplete')
           : result.finishReason === 'stop' ? 'complete' : 'incomplete';
         const modelText = result.text || 'The request ended before a final reply. Check the action results before continuing.';
         const text = binding.formatReply?.({ text: modelText, toolNames: steps.flatMap(step => step.toolCalls.map(call => call.toolName)) }) ?? modelText;

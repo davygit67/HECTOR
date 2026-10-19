@@ -4,8 +4,8 @@ import type { MemoryEntry } from './memory.js';
 import { roomContext } from './canvas.js';
 
 /** Prefer concise current facts, retrieving full geometry/config through inspect_room on demand. */
-export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSearch: boolean, programs = false) {
-  const full = roomContext(snapshot, youtubeSearch, programs);
+export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSearch: boolean, programs = false, mapping = false) {
+  const full = roomContext(snapshot, youtubeSearch, programs, mapping);
   const setup = /calibrat|align|corner|projector|geometry|surface.*mov|viewer|coverage|sensor|hardware/i.test(prompt);
   const media = /video|youtube|music|movie|backlight|light|media|play|sound|volume/i.test(prompt) || full.contents.some(c => c.kind === 'youtube' || c.kind === 'media');
   const { capabilities, ...state } = full;
@@ -21,6 +21,7 @@ export function focusedRoomContext(snapshot: Snapshot, prompt: string, youtubeSe
       contentRegistry: capabilities.contentRegistry.map(c => ({ kind: c.kind, description: c.description, actions: c.actions })),
       localMedia: capabilities.localMedia, layerAndDisplayControls: capabilities.layerAndDisplayControls, surfaceFill: capabilities.surfaceFill,
       objectProjection: capabilities.objectProjection,
+      mappingWorkshop: capabilities.mappingWorkshop,
       generatedPrograms: capabilities.generatedPrograms,
       videoBacklight: media ? capabilities.videoBacklight : undefined,
       unavailable: capabilities.unavailable,

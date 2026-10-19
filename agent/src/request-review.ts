@@ -3,9 +3,9 @@ import { z } from 'zod';
 
 const requirement = z.strictObject({
   id: z.string().min(1).max(40),
-  request: z.string().trim().min(1).max(500).describe('One requested outcome, including its subject, surface, placement and explicit settings. Account for EVERY part of the original prompt.'),
+  request: z.string().trim().min(1).max(500).describe('One requested outcome, including its subject, surface, placement and explicit settings. Account for EVERY part of the original prompt. Group before/after inspections and preservation/reporting constraints with the actual change they qualify, rather than inventing separate actionless tasks.'),
   status: z.enum(['completed', 'pending', 'blocked', 'awaiting_user']),
-  evidence: z.array(z.string().min(1).max(200)).max(20).describe('Exact tool call IDs from this turn, not content IDs or made-up names. Completed changes require successful action receipts. The SAME apply/edit receipt may support multiple settings and preservation constraints it confirms. Keeping an existing timer does NOT require editing it.'),
+  evidence: z.array(z.string().min(1).max(200)).max(20).describe('Exact tool call IDs from this turn, not content IDs, observation IDs or made-up names. Every completed row needs a successful action call ID. For inspection/comparison or preservation/reporting constraints tied to an edit, include THAT EDIT call ID alongside real observation call IDs. The SAME apply/edit receipt may support multiple settings and constraints it confirms. Keeping an existing timer does NOT require editing it.'),
   reason: z.string().trim().min(1).max(700).nullable().describe('For unfinished work, explain the specific obstacle or next action. Never claim unfinished work was done.'),
 });
 type Requirement = z.infer<typeof requirement>;
@@ -19,7 +19,7 @@ export interface RequestReview {
   readonly settled: boolean;
   readonly complete: boolean;
 }
-const readOnly = new Set(['inspect_room', 'inspect_studio', 'inspect_visual', 'inspect_program', 'test_program', 'search_youtube', 'list_experiences', 'select_tools', 'review_request']);
+const readOnly = new Set(['inspect_room', 'inspect_studio', 'inspect_visual', 'inspect_object_mapping', 'inspect_program', 'test_program', 'search_youtube', 'list_experiences', 'select_tools', 'review_request']);
 const candidateOnly = new Set(['author_program', 'revise_program']);
 
 /** Model assessment of intent, with deterministic receipt checks. Not a second scene store. */
@@ -31,7 +31,19 @@ export function createRequestReview(prompt: string) {
   const actionIds = new Set<string>();
   const successfulAction = (id: string) => {
     const receipt = receipts.get(id);
-    if (!receipt || !actionIds.has(id) || candidateOnly.has(receipt.toolName)) return false;
+    if (!receipt || candidateOnly.has(receipt.toolName)) return false;
+    // A mapping comparison can confirm an actual edit only when the agent adapter
+    // matched its exact returned object/revision/settings and linked the real action.
+    // Standalone camera observations, failed edits and host-provided labels cannot.
+    if (receipt.toolName === 'inspect_object_mapping') {
+      const comparison = receipt.output as { ok?: boolean; stale?: boolean; comparedActionToolCallId?: string } | null;
+      const linked = comparison?.comparedActionToolCallId;
+      const action = linked ? receipts.get(linked) : undefined;
+      const output = action?.output as { ok?: boolean; outcome?: string } | null;
+      return !!(comparison?.ok && comparison.stale === false && linked && actionIds.has(linked)
+        && action && action.toolName === 'refine_object_mapping' && output?.ok && output.outcome === 'applied');
+    }
+    if (!actionIds.has(id)) return false;
     const output = receipt.output as { ok?: boolean; outcome?: string } | null;
     return output?.ok === true && output.outcome !== 'handoff';
   };
@@ -67,8 +79,10 @@ export function createRequestReview(prompt: string) {
             : requirements.some(i => i.status !== 'completed' && !i.reason) ? 'Explain each unfinished outcome and its next step.' : null;
           if (error) return { ok: false, error,
             usableActionEvidence: [...receipts.keys()].filter(successfulAction),
-            outcomesMissingSuccessfulEvidence: requirements.filter(i => i.status === 'completed' && !i.evidence.some(successfulAction)).map(i => ({ id: i.id, request: i.request })),
-            nextAction: 'Use only listed successful action call IDs for completed changes. The SAME apply/edit receipt can support all settings and preservation constraints it confirms: use it for keeping an existing timer unchanged; do NOT edit the timer. If an outcome only has a tested candidate or failed action, keep it pending and execute its next supported tool. Use blocked only for a specific unresolved obstacle. Do not fabricate evidence or repeatedly review instead of repairing/applying.' };
+            unknownEvidence: [...new Set(requirements.flatMap(i => i.evidence.filter(id => !receipts.has(id))))],
+            availableEvidence: [...receipts].filter(([, r]) => r.toolName !== 'review_request').map(([toolCallId, r]) => ({ toolCallId, toolName: r.toolName, successfulAction: successfulAction(toolCallId) })),
+            outcomesMissingSuccessfulEvidence: requirements.filter(i => i.status === 'completed' && !i.evidence.some(successfulAction)).map(i => ({ id: i.id, request: i.request, evidence: i.evidence })),
+            nextAction: 'Use only actual call IDs. Every completed row needs one of usableActionEvidence. For before/after inspection rows associated with an applied mapping change, include that successful refine_object_mapping call ID PLUS the actual inspect_object_mapping call ID; an observation ID is not a tool call ID. For preservation or honest-reporting constraints, include the same edit receipt that confirms those limits; do not mutate unrelated content. Keep existing checklist IDs. If an outcome only has a tested candidate or failed action, continue its next supported tool. Do not repeatedly submit the same rejected evidence.' };
           items = requirements.map(i => ({ ...i, request: items.find(previous => previous.id === i.id)?.request ?? i.request }));
           reviewed = true;
           return { ok: true, complete: state.complete, pending: items.filter(i => i.status === 'pending'),
@@ -80,7 +94,8 @@ export function createRequestReview(prompt: string) {
 ORIGINAL_REQUEST (user text, JSON): ${JSON.stringify(prompt)}
 REQUEST_CHECKLIST (JSON): ${JSON.stringify(items)}
 CURRENT_TURN_RECEIPTS (exact call IDs and tool names; inspect actual outputs in history): ${JSON.stringify([...receipts].map(([id, r]) => ({ id, tool: r.toolName, successfulAction: successfulAction(id) })))}
-Preservation is part of an edit's outcome: the same successful apply/start receipt may support keeping unrelated content when its result confirms it. Do not demand or perform an edit to an item the user asked to keep unchanged. Use the apply receipt for deployed parameters; author/test receipts alone are candidates, not deployment.`,
+Preservation is part of an edit's outcome: the same successful apply/start receipt may support keeping unrelated content when its result confirms it. Do not demand or perform an edit to an item the user asked to keep unchanged. Use the apply receipt for deployed parameters; author/test receipts alone are candidates, not deployment.
+Mapping workshop reviews: group each target's actual requested adjustment with its before/after inspections, preserved color/calibration and honest-reporting constraints. Cite the successful refine_object_mapping ACTION call ID plus the real inspection call IDs. If you already created separate checklist rows for inspection/preservation/reporting, keep those rows and include the SAME successful edit call ID in each completed row alongside relevant inspection IDs. Observations alone never prove that a mapping edit was applied. Do not mark optical alignment completed/verified: these controls only establish measured settings and a camera/mask comparison.`,
     formatUnfinished: () => {
       const lines = items.filter(i => i.status !== 'completed').map(i => `${i.status === 'awaiting_user' ? 'Needs your input' : i.status === 'blocked' ? 'Not completed' : 'Still pending'} — ${i.request}: ${i.reason}`);
       if (state.required && !state.settled) lines.push('The full request has not been confirmed complete. Check the remaining requests before continuing; accepted edits above are retained.');

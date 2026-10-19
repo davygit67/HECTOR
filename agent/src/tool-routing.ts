@@ -6,6 +6,7 @@ const groups = {
   layout: ['edit_scene', 'arrange_panel', 'set_grid', 'fill_surface', 'operate_studio', 'inspect_visual'],
   media: ['search_youtube', 'display_youtube', 'set_youtube_backlight', 'configure_video_backlight', 'configure_media', 'update_content', 'control_content', 'attach_content', 'remove_content', 'operate_studio', 'inspect_visual'],
   studio: ['operate_studio', 'inspect_visual', 'edit_scene'],
+  mapping: ['inspect_object_mapping', 'refine_object_mapping', 'operate_studio'],
   memory: ['manage_memory'],
   experiences: ['list_experiences', 'apply_experience', 'operate_studio', 'inspect_visual', 'edit_scene', 'arrange_panel'],
   programs: ['author_program', 'revise_program', 'test_program', 'inspect_program', 'apply_program', 'configure_program', 'rollback_program', 'control_content', 'update_content', 'attach_content', 'remove_content', 'arrange_panel', 'edit_scene', 'inspect_visual'],
@@ -23,6 +24,7 @@ export function createToolSelector(prompt: string) {
   if (/window|fullscreen|output|preview|inspect|look|interface|hardware|sensor|record|session|capture|connect|replay|import|composition|save|recall|view/i.test(prompt)) enabled.add('studio');
   if (/kinect|\b(scan|map|forget|reset)\b.*\b(room|reference|table)\b/i.test(prompt)) enabled.add('studio');
   if (/\b(object|container|cylinder|clorox|tracking)\b/i.test(prompt)) enabled.add('studio');
+  if (/kinect|mapping|\b(object|container|cylinder|clorox|tracking|outline|edge|edges|bounding|trim|feather)\b/i.test(prompt)) enabled.add('mapping');
   if (/remember|forget|memory|prefer|learn/i.test(prompt)) enabled.add('memory');
   if (/experience|cinema|underwater|gallery|transform|cooking station|music room|tabletop target/i.test(prompt)) enabled.add('experiences');
   if (/program|procedural|custom|interactive|\bgame\b|animat|particle|leprechaun|clover|creature|border|draw|generat|\bcode\b|rollback/i.test(prompt)) enabled.add('programs');
@@ -31,7 +33,7 @@ export function createToolSelector(prompt: string) {
   return {
     tools: {
       select_tools: tool({
-        description: 'Enable more capabilities for the next step if needed. Categories: timers; content (notes/recipes/art/games); layout (layers/display/alignment); media (YouTube/local files/backlight); studio (UI/output/hardware/saved compositions/visual inspection); memory; experiences; programs (original 2D animation and pointer/keyboard games with test/repair and editable parameters). all exposes every implemented tool. This changes available tools, not the room.',
+        description: 'Enable more capabilities for the next step if needed. Categories: timers; content (notes/recipes/art/games); layout (layers/display/alignment); media (YouTube/local files/backlight); studio (UI/output/hardware/saved compositions/visual inspection); mapping (paired camera/depth inspection, measured object selection and reversible edge refinement); memory; experiences; programs (original 2D animation and pointer/keyboard games with test/repair and editable parameters). all exposes every implemented tool. This changes available tools, not the room.',
         strict: true, inputSchema: z.strictObject({ categories: z.array(z.enum([...names, 'all'])).min(1).max(9) }),
         execute: async input => {
           for (const category of input.categories) { if (category === 'all') { all = true; enabled.add('programs'); } else enabled.add(category); }

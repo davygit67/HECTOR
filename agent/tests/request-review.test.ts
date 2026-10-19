@@ -31,6 +31,27 @@ test('standalone program inspection/testing does not demand a scene mutation', (
   assert.equal(r.state.required, false);
 });
 
+test('a camera/depth mapping inspection is not evidence of an applied mapping change', async () => {
+  const r = createRequestReview('Tighten the selected container outline.');
+  r.state.recordStep({ calls: [{ toolName: 'inspect_object_mapping', toolCallId: 'camera' }],
+    results: [{ toolName: 'inspect_object_mapping', toolCallId: 'camera', output: { ok: true, revision: 4, opticalAlignmentVerified: false } }] });
+  assert.equal(r.state.required, false);
+  const result = await r.tools.review_request.execute!({ requirements: [{ id: 'outline', request: 'Tighten the outline', status: 'completed', evidence: ['camera'], reason: null }] },
+    { toolCallId: 'review', messages: [], context: {} });
+  assert.equal((result as { ok: boolean }).ok, false);
+});
+
+test('an exact post-edit mapping comparison can cite its linked accepted action, but cannot invent one', async () => {
+  for (const success of [false, true]) {
+    const r = createRequestReview('Tighten the edge and inspect afterward.');
+    r.state.recordStep({ calls: [{ toolName: 'refine_object_mapping', toolCallId: 'edit' }], results: [{ toolName: 'refine_object_mapping', toolCallId: 'edit', output: { ok: success, outcome: success ? 'applied' : 'failed' } }] });
+    r.state.recordStep({ calls: [{ toolName: 'inspect_object_mapping', toolCallId: 'comparison' }], results: [{ toolName: 'inspect_object_mapping', toolCallId: 'comparison', output: { ok: true, stale: false, comparedActionToolCallId: 'edit' } }] });
+    const result = await r.tools.review_request.execute!({ requirements: [{ id: 'inspect-after', request: 'Inspect after the accepted change', status: 'completed', evidence: ['comparison'], reason: null }] },
+      { toolCallId: 'review', messages: [], context: {} });
+    assert.equal((result as { ok: boolean }).ok, success);
+  }
+});
+
 test('an early text stop triggers whole-request review and continues supported work without replay', async () => {
   const f = canvasFixture();
   const model = new RawMockLanguageModelV4({ doGenerate: [
