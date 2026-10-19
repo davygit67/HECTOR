@@ -10,6 +10,7 @@ import { readMediaImage, readMediaState } from './nativeMedia';
 import { localMediaSource } from './localMedia';
 import { validateMediaCommand } from './shared/media';
 import type { StudioPort, StudioUI, StudioOperation, StudioSnapshot, StudioResult, HardwareStatus, HardwareAction, CompositionSummary } from './shared/studio';
+import type { MappingObservation, MappingOperation, MappingState } from './shared/mappingWorkshop';
 
 interface UIAdapter {
   state(): StudioUI;
@@ -20,7 +21,7 @@ interface UIAdapter {
   present(mode: 'align' | 'project' | 'exit'): void;
 }
 let ui: UIAdapter | undefined;
-let hardware: { status(): HardwareStatus; execute(command: HardwareAction): Promise<string> } | undefined;
+let hardware: { status(): HardwareStatus; execute(command: HardwareAction): Promise<string>; observeMapping?():Promise<MappingObservation>; mappingExecute?(operation:MappingOperation):Promise<{message:string;value:MappingState}> } | undefined;
 export function registerStudioUI(adapter: UIAdapter) { ui = adapter; return () => { if (ui === adapter) ui = undefined; }; }
 export function registerHardware(adapter: NonNullable<typeof hardware>) { hardware = adapter; const unregister = registerPhysicalStatus(adapter.status); return () => { unregister(); if (hardware === adapter) hardware = undefined; }; }
 const libraryKey = 'projection-mapper.compositions.v1';
@@ -51,7 +52,7 @@ async function inspect(): Promise<StudioSnapshot> {
     assets: [...scene.contents, ...scene.timers].map(c => ({ id: c.id, title: c.title, kind: 'kind' in c ? c.kind : 'timer', surfaceId: c.surfaceId })),
     programs: programStatuses(),
     compositions: await listCompositions(), hardware: hardware?.status() ?? unavailableHardware,
-    capabilities: { sceneBatch: !!agentBatch, observation: true, nativeMedia: !!window.projectionMedia, nativeOutput: !!window.projection, fileImportRequiresClick: true, physicalObservation: false },
+    capabilities: { sceneBatch: !!agentBatch, observation: true, nativeMedia: !!window.projectionMedia, nativeOutput: !!window.projection, fileImportRequiresClick: true, physicalObservation: false, mappingObservation:!!hardware?.observeMapping },
   };
 }
 export async function executeStudio(operation: StudioOperation, actor: 'user' | 'agent' = 'agent'): Promise<StudioResult> {
@@ -64,6 +65,10 @@ export async function executeStudio(operation: StudioOperation, actor: 'user' | 
   try {
     if (!operation || typeof operation !== 'object' || JSON.stringify(operation).length > 200000) throw new Error('Invalid Studio operation.');
     if (operation.type.startsWith('program.')) return programWorkshop.execute(operation as import('./shared/program').ProgramOperation);
+    if(operation.type.startsWith('mapping.')){
+      if(!hardware?.mappingExecute)throw new Error('Open Hardware setup in the updated Studio before refining object mapping.');
+      const value=await hardware.mappingExecute(operation as MappingOperation);return result('applied',value.message,value.value);
+    }
     switch (operation.type) {
       case 'ui.navigate':
         if (!ui || !['studio', 'hardware'].includes(operation.page) || operation.view && !['room', 'arrange', 'align'].includes(operation.view)
@@ -124,6 +129,7 @@ export async function executeStudio(operation: StudioOperation, actor: 'user' | 
 }
 export const studioPort: StudioPort = {
   inspect, execute: executeStudio,
+  observeMapping:async request=>{if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).length)throw new Error('Mapping inspection takes no image coordinates.');if(!hardware?.observeMapping)throw new Error('Open Hardware setup in the updated Studio to inspect the camera and object candidates.');return hardware.observeMapping();},
   observe: async request => {
     const { scene } = await bridge.getSnapshot(), surface = getSurface(scene, request.surfaceId ?? scene.selectedSurfaceId);
     if (request.maxWidth !== undefined && (!Number.isFinite(request.maxWidth) || request.maxWidth < 160 || request.maxWidth > 960)) throw new Error('Preview width must be 160–960 pixels.');

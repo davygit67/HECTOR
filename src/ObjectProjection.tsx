@@ -16,7 +16,7 @@ export function ObjectProjection({outputId,blackout=false,brightness=1}:{outputI
       if(node&&frame!==painted){painted=frame;node.width=innerWidth;node.height=innerHeight;const ctx=node.getContext('2d');
         if(ctx){ctx.fillStyle='#000';ctx.fillRect(0,0,node.width,node.height);
           if(frame?.mask){const m=frame.mask,tile=document.createElement('canvas');tile.width=m.width;tile.height=m.height;const tc=tile.getContext('2d')!;const img=tc.createImageData(m.width,m.height),rgb=[1,3,5].map(i=>parseInt(frame.color.slice(i,i+2),16));
-            for(let i=0;i<m.bits.length;i++){if(m.bits[i]){img.data[i*4]=rgb[0];img.data[i*4+1]=rgb[1];img.data[i*4+2]=rgb[2];}img.data[i*4+3]=255;}
+            for(let i=0;i<m.bits.length;i++){if(m.bits[i]){const a=m.alpha?m.alpha[i]/255:1;img.data[i*4]=rgb[0]*a;img.data[i*4+1]=rgb[1]*a;img.data[i*4+2]=rgb[2]*a;}img.data[i*4+3]=255;}
             tc.putImageData(img,0,0);ctx.imageSmoothingEnabled=false;const r=frame.rasterRect;ctx.drawImage(tile,r.x,r.y,r.width,r.height);
           }
         }

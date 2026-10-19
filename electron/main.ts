@@ -10,6 +10,7 @@ import { createChatController, localAgentFactory } from '../host/chat-controller
 import { createCanvasRpc } from '../host/canvas-rpc.js';
 import { reduceBatch } from '../src/shared/studioScene.js';
 import type { MemoryRequest, StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio.js';
+import type { MappingObservation } from '../src/shared/mappingWorkshop.js';
 import { startStaticPreview } from '../host/static-preview.js';
 import { LocalAssets } from '../host/local-assets.js';
 import { isChatCommand } from '../src/shared/chat.js';
@@ -90,6 +91,7 @@ const chat = createChatController({
     inspect: () => studioRpc.request<StudioSnapshot>({ operation: 'studio.inspect' }),
     execute: request => studioRpc.request<StudioResult>({ operation: 'studio.execute', request }),
     observe: request => studioRpc.request<StudioObservation>({ operation: 'studio.observe', request }),
+    observeMapping: request => studioRpc.request<MappingObservation>({ operation:'studio.observeMapping',request }),
   },
 }, localAgentFactory(root, dataDir), value => {
   if (control && !control.isDestroyed()) control.webContents.send('chat:state', value);

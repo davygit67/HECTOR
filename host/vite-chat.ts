@@ -4,6 +4,7 @@ import { createCanvasRpc } from './canvas-rpc';
 import type { CommandReceipt, Snapshot } from '../src/shared/bridge';
 import type { ChatRequest } from '../src/shared/chat';
 import type { StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio';
+import type { MappingObservation } from '../src/shared/mappingWorkshop';
 
 /** Dev-only, private HMR messages. Keys and the SDK stay in the Node process. */
 export function projectionChat(): Plugin {
@@ -43,6 +44,7 @@ export function projectionChat(): Plugin {
             inspect: () => rpc.request<StudioSnapshot>({ operation: 'studio.inspect' }),
             execute: request => rpc.request<StudioResult>({ operation: 'studio.execute', request }),
             observe: request => rpc.request<StudioObservation>({ operation: 'studio.observe', request }),
+            observeMapping: request => rpc.request<MappingObservation>({ operation:'studio.observeMapping',request }),
           },
         }, factory, state => client.send('pm:chat-state', state));
         sessions.set(client.socket, { controller, rpc, origin });

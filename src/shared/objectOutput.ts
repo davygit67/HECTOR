@@ -1,5 +1,5 @@
 /** Output-side watchdog has no dependency on the tracking worker or Studio heartbeat. */
-export interface ObjectOutputFrame {type:'object-frame';ownerId:string;outputId:string;sequence:number;expiresAt:number;viewport:{width:number;height:number;devicePixelRatio:number};rasterRect:{x:number;y:number;width:number;height:number};mask:{width:number;height:number;bits:Uint8Array}|null;color:string}
+export interface ObjectOutputFrame {type:'object-frame';ownerId:string;outputId:string;sequence:number;expiresAt:number;viewport:{width:number;height:number;devicePixelRatio:number};rasterRect:{x:number;y:number;width:number;height:number};mask:{width:number;height:number;bits:Uint8Array;alpha?:Uint8Array}|null;color:string}
 export class ObjectOutputGate {
   active=false; private owner='';private seq=-1;private frame:ObjectOutputFrame|null=null;
   accept(data:unknown,outputId:string){
@@ -11,6 +11,7 @@ export class ObjectOutputGate {
     const r=d.rasterRect,v=d.viewport,m=d.mask;
     if(!r||!v||![r.x,r.y,r.width,r.height,v.width,v.height,v.devicePixelRatio].every(Number.isFinite)||v.width<16||v.height<16||r.x<-.01||r.y<-.01||r.width<=0||r.height<=0||r.x+r.width>v.width+1||r.y+r.height>v.height+1)return false;
     if(m&&(!Number.isInteger(m.width)||!Number.isInteger(m.height)||m.width<1||m.width>480||m.height<1||m.height>480||!(m.bits instanceof Uint8Array)||m.bits.length!==m.width*m.height))return false;
+    if(m?.alpha&&(!(m.alpha instanceof Uint8Array)||m.alpha.length!==m.bits.length))return false;
     this.owner=d.ownerId;this.seq=d.sequence;this.frame=d;this.active=true;return true;
   }
   image(now:number,viewport:{width:number;height:number;devicePixelRatio:number},visible:boolean,fullscreen:boolean){const f=this.frame;

@@ -196,4 +196,4 @@ Live Scene568/Geometry5 was verified with the user's new UDTmUzu05BE video, fish
 
 For the fixed Kinect/projector workflow, see [Kinect room integration v1](KINECT_ROOM_V1.md): stable metric room capture, reconnect verification and calibrated table/wall targeting in the existing Studio.
 
-Curved objects and slow tabletop movement are available as an experimental workflow in **Hardware setup → Follow one object**. See [CURVED_OBJECTS_V1.md](CURVED_OBJECTS_V1.md) for calibration, selection, agent commands and hardware qualification limits.
+Curved objects and slow tabletop movement are available as an experimental workflow in **Hardware setup → Follow one object**. See [CURVED_OBJECTS_V1.md](CURVED_OBJECTS_V1.md) for calibration, selection, agent commands and hardware qualification limits. The [object mapping workshop](OBJECT_MAPPING_WORKSHOP.md) adds paired camera/depth inspection, numbered candidate selection and inward edge refinement with undo, shared by the Hardware interface and agent.

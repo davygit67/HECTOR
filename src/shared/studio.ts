@@ -1,6 +1,7 @@
 import type { ProgramOperation, ProgramRuntimeStatus } from './program.js';
 import type { RoomModelStatus } from './roomModel.js';
 import type { ObjectMappingStatus } from './objectMapping.js';
+import type { MappingObserveRequest, MappingObservation, MappingOperation } from './mappingWorkshop.js';
 import type { Command } from './domain.js';
 import type { Snapshot, OutputCommand } from './bridge.js';
 import type { MediaCommand, MediaState } from './media.js';
@@ -38,9 +39,9 @@ export interface StudioSnapshot {
   assets: { id: string; title: string; kind: string; surfaceId: string; ready?: boolean }[];
   programs?: ProgramRuntimeStatus[];
   compositions: CompositionSummary[]; hardware: HardwareStatus;
-  capabilities: { sceneBatch: boolean; observation: boolean; nativeMedia: boolean; nativeOutput: boolean; fileImportRequiresClick: true; physicalObservation: false };
+  capabilities: { sceneBatch: boolean; observation: boolean; nativeMedia: boolean; nativeOutput: boolean; fileImportRequiresClick: true; physicalObservation: false; mappingObservation?: boolean };
 }
-export type StudioOperation = ProgramOperation
+export type StudioOperation = ProgramOperation | MappingOperation
   | { type: 'ui.navigate'; page: StudioUI['page']; view?: StudioView; inspector?: StudioInspector }
   | { type: 'ui.configure'; coverage?: boolean; previews?: boolean; interact?: boolean; resetView?: boolean; expandedAssetId?: string | null }
   | { type: 'output.command'; command: OutputCommand }
@@ -63,6 +64,7 @@ export interface StudioPort {
   inspect(): Promise<StudioSnapshot>;
   execute(operation: StudioOperation): Promise<StudioResult>;
   observe(request: StudioObserveRequest): Promise<StudioObservation>;
+  observeMapping?(request: MappingObserveRequest): Promise<MappingObservation>;
 }
 /** Same shape as the agent-owned memory store; kept dependency-free for renderer/IPC. */
 export interface MemoryEntry {
@@ -82,5 +84,5 @@ export interface AgentMemory {
   list(): Promise<MemoryState>; put(entry: Extract<MemoryRequest, { action: 'put' }>['entry']): Promise<MemoryEntry>;
   remove(id: string): Promise<void>; clear(): Promise<void>; setEnabled(enabled: boolean): Promise<void>; record(event: AdjustmentEvent): Promise<void>;
 }
-export type StudioRpc = { operation: 'studio.inspect' } | { operation: 'studio.execute'; request: StudioOperation } | { operation: 'studio.observe'; request: StudioObserveRequest };
+export type StudioRpc = { operation: 'studio.inspect' } | { operation: 'studio.execute'; request: StudioOperation } | { operation: 'studio.observe'; request: StudioObserveRequest } | { operation: 'studio.observeMapping'; request: MappingObserveRequest };
 export const ROOM_ID = 'local-room';

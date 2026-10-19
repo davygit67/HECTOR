@@ -14,6 +14,7 @@ export async function handleCanvasRpc(data: CanvasRpc): Promise<unknown> {
     case 'studio.inspect': return studioPort.inspect();
     case 'studio.execute': return studioPort.execute(data.request);
     case 'studio.observe': return studioPort.observe(data.request);
+    case 'studio.observeMapping': if(!studioPort.observeMapping)throw new Error('Mapping observations unavailable in this Studio.');return studioPort.observeMapping(data.request);
     default: throw new Error('Unknown Studio operation.');
   }
 }

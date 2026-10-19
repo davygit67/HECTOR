@@ -2,6 +2,7 @@ import type { SensorFrame } from './sensor.js';
 import { cameraToRoom, roomMatchesFrame, type RoomReference } from './roomModel.js';
 import { dot, sub, surfaceNormal, surfaceUV, inDomain, type Surface, type Vec3 } from './spatial.js';
 import { projectCamera, pointInFit, regionContains, validRegion, type ObjectObservation, type ProjectorFit, type TrackingRegion } from './objectMapping.js';
+import { DEFAULT_MAPPING_SETTINGS, mappingSettings, softenMeasuredMask, type MappingSettings, type MappingCandidate } from './mappingWorkshop.js';
 
 interface Grid { w:number; h:number; step:number; camera:(Vec3|null)[]; world:(Vec3|null)[] }
 interface Component { indices:number[]; center:Vec3; extent:Vec3; edge:boolean }
@@ -45,9 +46,11 @@ function components(g:Grid,surface:Surface,region:TrackingRegion):Component[] {
   return result;
 }
 /** Measured depth triangles, including non-target occluders, rasterized from projector view. */
-export function objectMask(g:Grid,selected:number[],fit:ProjectorFit) {
+export function objectMask(g:Grid,selected:number[],fit:ProjectorFit,settings:MappingSettings=DEFAULT_MAPPING_SETTINGS) {
   const width=480,height=Math.round(width*fit.raster.height/fit.raster.width),bits=new Uint8Array(width*height),depth=new Float32Array(bits.length).fill(Infinity);
-  const target=new Uint8Array(g.w*g.h);selected.forEach(i=>target[i]=1);
+  const bounds=cameraBounds(selected,g.w,g.h),t=settings.trim;
+  const target=new Uint8Array(g.w*g.h);selected.forEach(i=>{const x=(i%g.w+.5)/g.w,y=(Math.floor(i/g.w)+.5)/g.h;
+    if(x>=bounds.x+bounds.w*t.left&&x<=bounds.x+bounds.w*(1-t.right)&&y>=bounds.y+bounds.h*t.top&&y<=bounds.y+bounds.h*(1-t.bottom))target[i]=1;});
   const projected=g.camera.map(p=>p?projectCamera(fit.matrix,p):null);
   function triangle(ia:number,ib:number,ic:number) {
     const pa=g.camera[ia],pb=g.camera[ib],pc=g.camera[ic],a=projected[ia],b=projected[ib],c=projected[ic];
@@ -66,12 +69,48 @@ export function objectMask(g:Grid,selected:number[],fit:ProjectorFit) {
       }
   }
   for(let y=0;y<g.h-1;y++)for(let x=0;x<g.w-1;x++){const a=y*g.w+x;triangle(a,a+1,a+g.w);triangle(a+1,a+g.w+1,a+g.w);}
-  // One-cell inset avoids claiming uncertain silhouettes or bridging depth holes.
-  const inset=bits.slice();for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=y*width+x;if(x===0||y===0||x===width-1||y===height-1||!bits[i-1]||!bits[i+1]||!bits[i-width]||!bits[i+width])inset[i]=0;}
-  return {width,height,bits:inset};
+  return softenMeasuredMask({width,height,bits},settings);
+}
+function cameraBounds(indices:number[],w:number,h:number):TrackingRegion {
+  const xs=indices.map(i=>i%w),ys=indices.map(i=>Math.floor(i/w));
+  const x=Math.min(...xs),y=Math.min(...ys);return{x:x/w,y:y/h,w:(Math.max(...xs)-x+1)/w,h:(Math.max(...ys)-y+1)/h};
+}
+/** Ordered exterior of the measured cells; full masks preserve holes in the image overlay. */
+function cameraContour(bits:Uint8Array,w:number,h:number) {
+  const edges=new Map<number,number[]>(),stride=w+1;
+  const edge=(a:number,b:number)=>edges.set(a,[...(edges.get(a)??[]),b]);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;if(!bits[i])continue;const p=y*stride+x;
+    if(!y||!bits[i-w])edge(p,p+1);if(x===w-1||!bits[i+1])edge(p+1,p+stride+1);
+    if(y===h-1||!bits[i+w])edge(p+stride+1,p+stride);if(!x||!bits[i-1])edge(p+stride,p);}
+  let longest:number[]=[];
+  while(edges.size){const start=edges.keys().next().value!;let p=start;const loop:number[]=[];
+    do{loop.push(p);const next=edges.get(p);if(!next?.length)break;const q=next.pop()!;if(!next.length)edges.delete(p);p=q;}while(p!==start&&loop.length<100000);
+    if(loop.length>longest.length)longest=loop;
+  }
+  const step=Math.max(1,Math.ceil(longest.length/128));return longest.filter((_,i)=>i%step===0).map(p=>({x:(p%stride)/w,y:Math.floor(p/stride)/h}));
+}
+export interface MeasuredCandidate extends Omit<MappingCandidate,'id'|'number'> { seed:{x:number;y:number}; cameraMask:{width:number;height:number;bits:Uint8Array} }
+export interface MappingScan { candidates:MeasuredCandidate[]; projectorMask:ReturnType<typeof objectMask>|null; selectedIndex:number|null }
+export function scanMappingFrame(frame:SensorFrame,room:RoomReference,surface:Surface,fit:ProjectorFit|null,settings:MappingSettings,selectedCenter?:Vec3):MappingScan {
+  const g=grid(frame,room),all=components(g,surface,{x:0,y:0,w:1,h:1}).sort((a,b)=>b.indices.length-a.indices.length).slice(0,8);
+  const candidates=all.map(c=>{
+    const bounds=cameraBounds(c.indices,g.w,g.h),cx=(bounds.x+bounds.w/2)*g.w,cy=(bounds.y+bounds.h/2)*g.h;
+    const index=c.indices.reduce((a,b)=>Math.hypot(b%g.w-cx,Math.floor(b/g.w)-cy)<Math.hypot(a%g.w-cx,Math.floor(a/g.w)-cy)?b:a);
+    const seed={x:(index%g.w)/g.w,y:Math.floor(index/g.w)/g.h},region=trackingRegion(seed.x,seed.y),bits=new Uint8Array(g.w*g.h);c.indices.forEach(i=>bits[i]=1);
+    const selectable=!!fit&&!c.edge&&c.indices.every(i=>pointInFit(fit,g.camera[i]!)&&regionContains({x:region.x+2/g.w,y:region.y+2/g.h,w:region.w-4/g.w,h:region.h-4/g.h},(i%g.w)/g.w,Math.floor(i/g.w)/g.h));
+    return{bounds,centerMeters:c.center,extentMeters:c.extent,points:c.indices.length,contour:cameraContour(bits,g.w,g.h),selectable,seed,cameraMask:{width:g.w,height:g.h,bits}};
+  });
+  const matching=selectedCenter?all.map((c,i)=>({c,i})).filter(({c})=>distance(c.center,selectedCenter)<.025):[];
+  const selectedIndex=matching.length===1?matching[0].i:null;
+  return{candidates,selectedIndex,projectorMask:fit&&selectedIndex!==null?objectMask(g,all[selectedIndex].indices,fit,settings):null};
+}
+export function matchMeasuredCandidate(saved:MeasuredCandidate,current:MeasuredCandidate[]):MeasuredCandidate {
+  const matches=current.filter(c=>distance(c.centerMeters,saved.centerMeters)<=.01&&c.points>=saved.points*.8&&c.points<=saved.points*1.2&&c.extentMeters.every((n,a)=>Math.abs(n-saved.extentMeters[a])<=Math.max(.01,saved.extentMeters[a]*.15)));
+  if(matches.length!==1||!matches[0].selectable)throw new Error('The observed object moved, changed or became ambiguous. Inspect the mapping again.');return matches[0];
 }
 export class ObjectTracker {
   private initial:Component|null=null; private previous:ObjectObservation|null=null; private failed=false;
+  private settings:MappingSettings=structuredClone(DEFAULT_MAPPING_SETTINGS);
   constructor(readonly room:RoomReference,readonly fit:ProjectorFit,readonly surface:Surface,readonly region:TrackingRegion,readonly seed:{x:number;y:number}) {
     if(!validRegion(region)||surface.kind!=='table'||surface.measurement?.roomReferenceId!==room.id||fit.roomReferenceId!==room.id||fit.descriptor!==room.descriptor)throw new Error('Use a measured tabletop and projector calibration from this room.');
   }
@@ -79,6 +118,7 @@ export class ObjectTracker {
     if(this.failed)throw new Error('Tracking stopped. Select the object again.');
     try{return this.track(frame,now);}catch(e){this.failed=true;throw e;}
   }
+  configure(settings:MappingSettings){this.settings=mappingSettings(DEFAULT_MAPPING_SETTINGS,settings);}
   private track(frame:SensorFrame,now:number):ObjectObservation {
     if(this.room.invalidated||frame.device.kind==='synthetic'||frame.clockUncertaintyMs>300||now-frame.capturedAtMs+frame.clockUncertaintyMs>500||frame.capturedAtMs>now+100)throw new Error('Sensor observations are too old or uncertain. Projection stopped.');
     if(!roomMatchesFrame(this.room,frame,this.region))throw new Error('Fixed background changed. Recheck the rig and capture a new room.');
@@ -100,8 +140,9 @@ export class ObjectTracker {
     const speedMps=this.previous?distance(found.center,this.previous.center)/((frame.capturedAtMs-this.previous.capturedAtMs)/1000):0;
     if(speedMps>.15)throw new Error('Object moved too quickly for this sensor feed. Keep motion below 15 cm/second and select again.');
     if(found.indices.some(i=>!pointInFit(this.fit,g.camera[i]!)))throw new Error('Object left the calibrated 3D volume. Recalibrate across its working area.');
-    const mask=objectMask(g,found.indices,this.fit);
-    if(mask.bits.reduce((s,n)=>s+n,0)<12)throw new Error('Too little confirmed projector coverage on this object.');
+    const mask=objectMask(g,found.indices,this.fit,this.settings);
+    // A deliberately tight trim may be empty; it must not reset identity or expand the mask.
+    if(this.settings.insetPx===1&&Object.values(this.settings.trim).every(v=>!v)&&mask.bits.reduce((s,n)=>s+n,0)<12)throw new Error('Too little confirmed projector coverage on this object.');
     this.previous={capturedAtMs:frame.capturedAtMs,clockUncertaintyMs:frame.clockUncertaintyMs,sequence:frame.sequence,region:this.region,points:found.indices.length,center:found.center,extent:found.extent,speedMps,positions:found.indices.flatMap(i=>g.world[i]!),mask};
     return this.previous;
   }

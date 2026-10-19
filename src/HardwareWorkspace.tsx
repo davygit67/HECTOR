@@ -1,6 +1,9 @@
 import { ObjectRuntime } from './objectRuntime';
 import { ObjectMappingPanel } from './ObjectMappingPanel';
 import type { ProjectorFit } from './shared/objectMapping';
+import { MappingWorkshop } from './mappingWorkshop';
+import { MappingWorkshopPanel } from './MappingWorkshopPanel';
+import type { MappingOperation } from './shared/mappingWorkshop';
 import { RoomReferencePanel } from './RoomReferencePanel';
 import { RoomContinuity, type RoomModelStatus } from './shared/roomModel';
 import { getRoomReference, invalidateRoomReference, loadRoomReference, saveRoomReference, subscribeRoomReference } from './roomModelStore';
@@ -32,6 +35,8 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const inbox = useMemo(() => new SensorInbox(), []);
   const continuity = useMemo(() => new RoomContinuity(), []);
   const objects=useRef<ObjectRuntime|null>(null);
+  const workshop=useRef<MappingWorkshop|null>(null);
+  const workshopContext=useRef<ConstructorParameters<typeof MappingWorkshop>[0]>(()=>{throw new Error('Hardware not ready.');});
   const objectContextRef=useRef<ConstructorParameters<typeof ObjectRuntime>[0]>(()=>{throw new Error('Hardware not ready.');});
   const [,refreshObjects]=useState(0);
   const [collectingRoom, setCollectingRoom] = useState(false), [roomFrames, setRoomFrames] = useState(0);
@@ -70,6 +75,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const connectionOpen = ['connecting', 'connected', 'waiting'].includes(connection);
   const canAcquire = connected && (sourceMode === 'demo' || sourceMode === 'live' && bridgeMode === 'live');
   objectContextRef.current=()=>({room:continuity.reference,live:canAcquire&&sourceMode==='live'&&bridgeMode==='live',busy:busy||operationActive.current,ready:continuity.status().canMap,outputs:[...(output.current?.outputs.values()??[])],nativeFullscreen:snapshot.output.fullscreen});
+  workshopContext.current=()=>({runtime:objects.current!,room:continuity.reference,surface:snapshot.scene.surfaces.find(s=>s.kind==='table'&&s.measurement?.source==='sensor'&&s.measurement.roomReferenceId===continuity.reference?.id),generation:inbox.generation,live:canAcquire&&sourceMode==='live'&&bridgeMode==='live',ready:continuity.status().canMap,busy:busy||operationActive.current});
 
   async function retain(session: SensorSession) {
     if (!mounted.current) return;
@@ -89,6 +95,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
   useEffect(() => {
     mounted.current = true;
     objects.current=new ObjectRuntime(()=>objectContextRef.current(),region=>{continuity.trackingRegion=region;},()=>{if(mounted.current)refreshObjects(n=>n+1);});
+    workshop.current=new MappingWorkshop(()=>workshopContext.current(),async()=>{const entry=await inbox.waitAfter(Date.now(),AbortSignal.timeout(3500),3000);return entry.frame;},()=>{if(mounted.current)refreshObjects(n=>n+1);});
     const unsubscribeRoom = subscribeRoomReference(() => { continuity.setReference(getRoomReference()); setRoomLoaded(true); });
     void loadRoomReference().then(r => { if (mounted.current) { continuity.setReference(r); setRoomLoaded(true); } }).catch(e => { if (mounted.current) { setError(describeError(e)); setRoomLoaded(true); } });
     output.current = new PatternOutputClient(() => refreshOutputs(n => n + 1));
@@ -117,7 +124,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     const warn = (event: BeforeUnloadEvent) => { if (recording.current || controller.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', warn);
     return () => {
-      mounted.current = false; objects.current?.dispose();objects.current=null; controller.current?.abort(); solveJob.current?.cancel(); source.current?.stop(); source.current = null; recording.current = null;
+      mounted.current = false;workshop.current?.dispose();workshop.current=null; objects.current?.dispose();objects.current=null; controller.current?.abort(); solveJob.current?.cancel(); source.current?.stop(); source.current = null; recording.current = null;
       output.current?.dispose(); output.current = null; clearInterval(timer); unsubscribe(); unsubscribeRoom(); window.removeEventListener('beforeunload', warn);
     };
   }, [inbox]);
@@ -317,6 +324,8 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     ? snapshot.scene.surfaces.filter(s => s.measurement?.source === 'sensor' && s.measurement.roomReferenceId === continuity.reference?.id && measurementMatchesFrame(s.measurement, inbox.latest!.frame) && outputs.some(o => o.visible && (o.fullscreen || snapshot.output.fullscreen) && o.width === s.measurement!.viewport.width && o.height === s.measurement!.viewport.height && o.devicePixelRatio === s.measurement!.viewport.devicePixelRatio)).map(s => s.id) : [];
   }
   useEffect(() => registerHardware({
+    observeMapping:async()=>{if(!workshop.current)throw new Error('Open Hardware setup.');return workshop.current.observe();},
+    mappingExecute:async(operation:MappingOperation)=>{if(!workshop.current)throw new Error('Open Hardware setup.');return workshop.current.execute(operation);},
     status: () => ({ initialized: true, mode: sourceMode, connection, message: error || connectionMessage,
       provenance: sourceMode === 'demo' || bridgeMode === 'demo' ? 'synthetic' : sourceMode === 'replay' || bridgeMode === 'replay' ? 'replay' : bridgeMode === 'live' ? 'sensor' : 'unknown',
       busy, canAcquire, frames: recordCount, recording: isRecording, capturing,
@@ -394,6 +403,7 @@ export function HardwareWorkspace({ snapshot }: { snapshot: Snapshot }) {
     <MeasuredRoomPanel result={roomSolve} state={mappingState} message={mappingMessage} busy={busy} canMap={roomStatus.canMap && canAcquire && sourceMode === 'live' && bridgeMode === 'live'} canSolve={selected?.kind === 'pattern-capture' && selected.status === 'complete'} appliedId={appliedCandidate}
       map={() => void capture(true).catch(e => { setError(describeError(e)); setMappingMessage(describeError(e)); })} solve={() => selected && void solveCapture(selected)} useSurface={(id, kind) => void useCandidate(id, kind).catch(e => setError(describeError(e)))} />
     <ObjectMappingPanel status={objects.current?.status()??{state:'uncalibrated',message:'Connect the live Kinect to begin.',canFill:false}} frame={sourceMode==='live'&&bridgeMode==='live'?frame:null} region={objects.current?.region} busy={busy} canCalibrate={roomStatus.canMap&&canAcquire&&sourceMode==='live'&&bridgeMode==='live'} calibrate={()=>void capture(false,true).catch(e=>setError(describeError(e)))} select={selectObject} fill={fillObject} stop={()=>objects.current?.stop()}/>
+    <MappingWorkshopPanel observation={workshop.current?.latest??null} state={objects.current?.mappingState()} available={roomStatus.canMap&&canAcquire&&sourceMode==='live'&&bridgeMode==='live'&&!busy} inspect={async()=>{if(!workshop.current)throw new Error('Hardware not ready.');return workshop.current.observe();}} execute={async op=>{if(!workshop.current)throw new Error('Hardware not ready.');return workshop.current.execute(op);}}/>
     <RoomScanPanel />
     <section className="hardware-card pattern-card"><div className="hardware-card-title"><div><span className="eyebrow">ADVANCED / PATTERN CAPTURE</span><h3>Connect pixels to observations</h3></div><span className="hardware-badge">Capture only · no geometry changes</span></div>
       <div className="pattern-columns"><div><PatternPreview pattern={shownPattern} /><p className="hardware-caption">{shownPattern ? patternLabel(shownPattern) : 'Choose a test pattern or start a sequence.'}</p>{replayCapture && <p className="hardware-caption">Captured after {replayCapture.settleMs} ms settling · {replayCapture.presentation.mode === 'synthetic' ? 'Virtual projector' : 'Output window'} · source clock ±{frame?.clockUncertaintyMs} ms</p>}</div>
