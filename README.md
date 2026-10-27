@@ -24,7 +24,8 @@ macOS: the same commands with `npm`.
 | `npm start` | Production build, then launch. |
 | `npm run check` | Unit tests, TypeScript, renderer and desktop build. |
 | `npm run smoke` | Launches the built app with a throwaway profile and drives both windows (run `npm run build` first). Writes screenshots and frame metrics to `artifacts/`. |
-| `npm run package` | electron-builder (NSIS on Windows, DMG on macOS). Unsigned; installers not yet qualified. |
+| `npm run package` | Unpacked app folder in `release/` (for quick local checks; the folder must stay together). |
+| `npm run dist` | Unsigned distributables in `release/`: NSIS installer + zip (Windows), DMG + zip (macOS). |
 
 ## Using HECTOR
 
@@ -54,9 +55,10 @@ Known limits:
 - [AGENTS.md](AGENTS.md): contributor rules.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): process, state, rendering and media design.
 - [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md): full release scope, reference evidence, current status.
-- [docs/ROADMAP.md](docs/ROADMAP.md): milestones and the pending show-sequencing scope decision.
+- [docs/ROADMAP.md](docs/ROADMAP.md): the single list of outstanding work, blockers and next steps.
 - [docs/QUALIFICATION.md](docs/QUALIFICATION.md): per-platform results and the hardware checklist.
 - [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md): dependency attribution.
-- [docs/SESSION_HANDOFF.md](docs/SESSION_HANDOFF.md): where the last session stopped.
+
+Development happens on the `feat/hector-studio` branch, which branches from `main` (currently just the initial commit). It is integrated into `main` through a reviewed pull request.
 
 HECTOR contains no code, assets, or history from the projects it studied ([projection-mapper](https://github.com/adknate05/projection-mapper), [FREEkMapper](https://github.com/v-prgmr/FREEkMapper)).

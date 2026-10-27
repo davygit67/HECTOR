@@ -1,52 +1,62 @@
 # HECTOR roadmap
 
-The first release is the full scope in [FEATURE_PARITY.md](FEATURE_PARITY.md), not the basic mapper. Milestones keep the app runnable. Nothing below is dropped; each item stays visible (disabled with an explanation where relevant) until it ships.
+This is the single list of outstanding work, blockers and next steps. Other documents cover:
 
-## M1 — Basic mapper (current; Windows smoke passing)
+- [FEATURE_PARITY.md](FEATURE_PARITY.md): the full first-release scope and reference evidence.
+- [QUALIFICATION.md](QUALIFICATION.md): what has been verified, and on which platform.
+- [ARCHITECTURE.md](ARCHITECTURE.md): how the app is built.
 
-Done in code: two-window app, draft/applied/saved with Live and Preview & Apply, undo/redo, quad warp, crop, ellipse mask, opacity/brightness/saturation, layers with lock/visibility/order, local image/video, generators (gradient, grid, elapsed clock), named setups, portable export, blackout, transport, display selection, and disconnect hiding.
+The first release is the full parity scope, not the basic mapper.
 
-Remaining to close M1:
+## Branches
 
-- macOS run of `npm run check` and `npm run smoke`, plus a first CI run on both OSes.
-- Physical projector checks from [QUALIFICATION.md](QUALIFICATION.md): second display, fullscreen with studio focus, disconnect/reconnect, sleep/wake.
-- Runtime coverage for image sources, loop/speed/volume, relink, named-setup recall, portable export/import, and pixel tests for crop and masks.
-- Coherent commits on `feat/hector-studio` and a PR for human review.
+`main` holds only the initial commit. All HECTOR work so far is on `feat/hector-studio`, which branches from `main`. It is integrated through a pull request after review; never merge it directly, and never push to `main`.
 
-## M2 — Editing depth
+## Blockers
 
-- Freeform polygon masks and feathering; mask editing on the canvas.
-- Group transforms (move/scale/rotate a group) as real hierarchy, not labels.
-- Per-source transport (independent clocks, in/out points, duration UI); seek support for files without duration metadata.
-- Resizable panels with persisted layout; keyboard shortcut map.
-- Output profiling surfaced in the studio over a bounded, low-rate channel.
+- **Publishing:** pushing `feat/hector-studio` and opening the draft PR need GitHub credentials. None were available to the agent session. Until the branch is pushed, CI on Windows and macOS has never run.
+- **macOS evidence:** none exists. It needs a CI run and an interactive run by a tester on macOS (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
+- **Hardware:** no projector or second display has been tested on either OS.
 
-## M3 — Live sources
+## Now: close out M1, the basic mapper
 
-- Screen/window capture through an explicit OS-permission workflow, with crop, stop and reconnect. Qualify Windows and macOS (Screen Recording permission) separately.
-- YouTube/live content through a sandboxed adapter that respects the service's terms. Profile timing separately from local media.
-- Profiling for each source type: local media, capture, stream.
+- Interactive macOS run of `npm run check`, `npm run smoke` and the manual checklist.
+- Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.
+- Human review of the draft PR.
 
-## M4 — Effects, generated content, ambient
+## Next: M2, editing depth
 
-- Ambient/backlight driven by real sampled source colors (no fabricated glow when a source is missing), with smoothing and spread.
-- Richer generated visuals, countdown timers, notes/recipe panels, target game. Any user-authored content is data, not executable code.
+- Freeform polygon masks with feathering, edited on the canvas.
+- Group transforms (move/scale/rotate a group) as a real hierarchy, not labels.
+- Per-source transport: independent clocks, in/out points, duration UI. Seek for files without duration metadata.
+- Resizable panels with persisted layout; a keyboard shortcut map.
 
-## M5 — AI assistant (optional drawer)
+## M3: live sources
 
-- Provider integration with secrets held in main only. The assistant emits validated `commandSchema` commands, and Preview mode still requires Apply. Memory is opt-in and local.
-- AI-authored programs only inside a sandbox with resource limits, offstage testing, and rollback. Design review is required before implementation.
+- Screen/window capture with crop and surface mapping (in progress on `feat/hector-studio`).
+- YouTube/live content through a sandboxed adapter that respects the service's terms.
+- Separate profiling for each source type: local media, capture, stream.
 
-## M6 — Spatial
+## M4: effects, generated content, ambient
+
+- Ambient/backlight driven by real sampled source colors, with no fabricated glow when a source is missing.
+- Richer generated visuals, countdown timers, notes/recipe panels, target game. User content is data, never executable code.
+
+## M5: AI assistant (optional drawer)
+
+- Provider integration with secrets held in main only. The assistant emits validated scene commands; in Preview mode it still requires Apply. Memory is opt-in and local.
+- AI-authored programs only inside a sandbox with resource limits, offstage testing and rollback. Needs a design review first.
+
+## M6: spatial
 
 - 3D room visualization with simulated projectors, clearly labeled as simulation.
-- Kinect/depth helper, scan/replay, measured calibration error, curved and slow-moving object mapping. Each step requires real hardware; replayed or generated data must be labeled.
+- Kinect/depth helper, scan/replay, measured calibration error, and curved or slow-moving object mapping. Each requires real hardware; replayed or generated data must be labeled as such.
 
-## M7 — Release
+## M7: release
 
-- Signed Windows installer; signed and notarized macOS DMG. Both are pending until performed with real credentials.
-- Measured frame-pacing report per platform and source type. No frame-rate guarantees without data.
+- Signed Windows installer; signed and notarized macOS build. Pending until performed with real credentials.
+- Frame-pacing report per platform and source type, measured fullscreen on projectors.
 
 ## Scope decision awaiting confirmation
 
-- **Show sequencing / live cue slots** (FREEkMapper has sequences): the user deprioritized it. It is recorded here and not scheduled until the user confirms whether it belongs in the first release.
+- **Show sequencing / live cue slots** (FREEkMapper has sequences): the user deprioritized it. It stays in scope on paper but is not scheduled until the user confirms whether it belongs in the first release.

@@ -41,7 +41,7 @@ Studio UI ──request()──► main: requestSchema.parse ─► authorize(se
 ## Media
 
 - Local files are granted only via a native file dialog in main. Main maps a random asset ID to a real path and serves it through the privileged `hector-media://asset/<id>` scheme. The renderer never sees filesystem paths. Responses carry `Access-Control-Allow-Origin: *` so WebGL can sample the frames: the elements load in CORS mode, and without that header the textures would be cross-origin tainted. CSP limits `media-src`/`img-src` to that scheme, and only HECTOR's own non-navigable pages can request it.
-- Studio and Output each have their own decoder per source. They share the main transport anchor (`position`, `anchor`, `playing`, `revision`) but are **not frame-locked**. The studio preview is always muted.
+- Studio and Output each have their own decoder per source. They share the main transport anchor (`position`, `anchor`, `playing`, `revision`) but are **not frame-locked**. The studio preview is always muted, and new sources start at volume 0, so output is silent until a volume is applied.
 - A transport revision change re-seeks to `position + elapsed`. Seeking requires a finite media duration; files without duration metadata (for example raw MediaRecorder WebM) play but ignore seek.
 - Delayed media events (`loadedmetadata`) read the entry's latest source and transport, so settings changed while a file loads are not lost.
 - Asset grants are pruned after each request. A grant survives while any scene reachable from the draft, applied output, saved project, or undo/redo history references it.
@@ -55,8 +55,8 @@ Studio UI ──request()──► main: requestSchema.parse ─► authorize(se
 ## Persistence
 
 - `current.json` in the user-data `projects` folder holds the last saved scene plus its asset paths. Named setups live in `projects/setups/<name>.json`. Writes go to a unique temporary file and are then renamed. File size is checked with `stat` before reading (4 MB limit), and the document is strictly validated.
-- Opening a project or setup assigns fresh asset IDs, so a staged project can never retarget media still used by applied output.
-- Portable export writes `<name>.hector.json` plus a uniquely named sibling `*.hector-media` folder. If a copy or write fails, the media folder is removed and nothing is reported as exported.
+- Opening a project or recalling a named setup stages it like any other edit: it stays in the draft in Preview mode and publishes immediately in Live mode. Fresh asset IDs are assigned, so a staged project can never retarget media still used by applied output. Named setups reference local files; only portable export copies media.
+- Portable export writes the current draft as `<name>.hector.json` plus a uniquely named sibling `*.hector-media` folder. It neither publishes the draft nor marks it saved. If a copy or write fails, the media folder is removed and nothing is reported as exported.
 
 ## Build
 

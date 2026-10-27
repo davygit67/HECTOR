@@ -10,35 +10,43 @@ Audit date: 2026-10-27. This is a release scope register, not a claim of complet
 
 “Code” below means source evidence, not runtime verification. “Documented” means a reference claims the behavior but its implementation has not yet been audited. The advanced P audit remains incomplete; inspect relevant modules before declaring parity. Hardware claims remain unverified even where prototype code exists.
 
-## Scope before implementation
+## Scope register
 
-All features started as Pending. The final column was updated on 2026-10-27 from code review and the Windows smoke run (`npm run smoke`, Windows 11, one built-in display, no projector). “Implemented” without a platform note means implemented in code only, not runtime-verified. No macOS evidence exists yet.
+Status vocabulary:
+
+- **Verified (platform):** exercised in the running app on that platform. The evidence and remaining checks are in [QUALIFICATION.md](QUALIFICATION.md).
+- **Implemented:** in code, not yet runtime-verified.
+- **Partial:** only part of the scope exists.
+- **Not started**
+- **Deferred:** waiting on a user scope decision.
+
+There is no macOS evidence for any row yet. Next steps live in [ROADMAP.md](ROADMAP.md).
 
 | Feature | Source / reference confidence | Dependencies | Acceptance criterion | HECTOR status |
 |---|---|---|---|---|
-| Quad creation, corner warp, opacity, rotation | F code; P documented | GPU compositor, command model | Independent corners; stable output under edits; opaque black outside | Implemented. Windows smoke: warped quad and opacity seen in output screenshot. Corner drag and rotate buttons not automated |
-| Precise nudge, scale, crop, masks | P documented; U | Geometry validation, inspector | Pixel nudge, bounded crop and masks agree in preview/output | Implemented in code (nudge, scale, crop, ellipse mask). Not checked at the pixel level. Freeform polygon masks pending |
-| Layers, groups, collapsing, visibility, locking | P documented for layers/visibility/opacity; groups unverified | Command history, editor | Reorder and group without changing media identity; locked objects cannot move | Partial. Order, visibility and lock implemented and unit-tested. Groups are labels with collapse, not transform hierarchies |
-| Local image/video, play/pause/seek/loop/speed/volume | F code for files/concurrent playback; P documented | Media registry, runtime clocks | Each control works; geometry apply never restarts unchanged media | Implemented. Windows smoke: local WebM decode, play, pause, seek (files with duration metadata), and the decoder and clock surviving geometry/effects Apply. Loop/speed/volume and image sources not yet runtime-tested. Files without duration metadata cannot seek |
-| Missing media relink | U; reference implementation unverified | File grants, persistence | Missing media reported; relink repairs references | Implemented in code. Not runtime-tested (needs the native dialog) |
-| Screen/window capture and crop | U; P explicitly uses owned browser capture for normal YouTube, not desktop capture | OS permission flow, direct GPU transport | Select source, crop, stop/reconnect; qualify both OSes | Not started; control disabled with explanation |
-| YouTube and live content | P documented normal watch-page worker and static iframe fallback | Sandboxed source adapter; service restrictions | Real playback, consent isolation, bounded transport, measured timing | Not started; control disabled; unavailable until adapter exists |
-| Ambient/backlight, color adjustment | P documented sampled colors, smoothing, spread, room fill | GPU effects, source analysis | Actual source-derived colors; no fabricated missing-source glow | Not started; control disabled. Brightness/saturation per surface implemented |
-| Generated visuals, notes, recipe panels, timers, target game | P documented; U expands clock/effects target | Procedural/text renderer, clock model | Controls and saved state work, no executable untrusted code | Partial. Gradient, calibration grid and elapsed clock implemented. Notes, recipes, countdown timers and game pending |
+| Quad creation, corner warp, opacity, rotation | F code; P documented | GPU compositor, command model | Independent corners; stable output under edits; opaque black outside | Verified (Windows) |
+| Precise nudge, scale, crop, masks | P documented; U | Geometry validation, inspector | Pixel nudge, bounded crop and masks agree in preview/output | Implemented; freeform masks not started |
+| Layers, groups, collapsing, visibility, locking | P documented for layers/visibility/opacity; groups unverified | Command history, editor | Reorder and group without changing media identity; locked objects cannot move | Partial: groups are labels, not transforms |
+| Local image/video, play/pause/seek/loop/speed/volume | F code for files/concurrent playback; P documented | Media registry, runtime clocks | Each control works; geometry apply never restarts unchanged media | Verified (Windows): video play/pause/seek. Other controls implemented |
+| Missing media relink | U; reference implementation unverified | File grants, persistence | Missing media reported; relink repairs references | Implemented |
+| Screen/window capture and crop | U; P explicitly uses owned browser capture for normal YouTube, not desktop capture | OS permission flow, direct GPU transport | Select source, crop, stop/reconnect; qualify both OSes | Not started |
+| YouTube and live content | P documented normal watch-page worker and static iframe fallback | Sandboxed source adapter; service restrictions | Real playback, consent isolation, bounded transport, measured timing | Not started; control disabled |
+| Ambient/backlight, color adjustment | P documented sampled colors, smoothing, spread, room fill | GPU effects, source analysis | Actual source-derived colors; no fabricated missing-source glow | Not started; control disabled |
+| Generated visuals, notes, recipe panels, timers, target game | P documented; U expands clock/effects target | Procedural/text renderer, clock model | Controls and saved state work, no executable untrusted code | Partial: gradient, grid, elapsed clock |
 | AI-authored programs | P documented sandbox/offstage testing; no implementation inspected | Isolation, resource limits, provider | Validated and tested artifacts; rollback; no privilege escape | Not started |
-| Named setups, save/load | F code; P documented compositions | Versioned schema, atomic persistence | Reload preserves geometry and settings; invalid file rejected | Implemented. Windows smoke: saved project and media grant restored after restart. Named-setup UI not automated |
-| Portable projects with media | U; P says compositions do not package media | Export/import manifest and media copy | Move package between machines without absolute paths | Implemented in code (failed exports roll back the media folder). Not runtime-tested across machines |
-| Two windows, fullscreen, display choice | F code; P host code | Electron output lifecycle | Studio focus/panels do not recreate output or exit fullscreen | Implemented. Windows smoke, single built-in display: stable output identity, fullscreen survives studio focus, windowed toggle, close/reopen. Projector, multi-display and macOS pending |
-| Blackout | F code; U | Immediate operation path | Immediate black while media clock continues | Implemented. Windows smoke: immediate, and video keeps advancing underneath |
-| Disconnect/reconnect | U; reference behavior unverified | Display event policy | No accidental projection onto laptop; explicit recovery | Implemented (hide + blackout, explicit reopen); pure policy unit-tested. Physical disconnect not tested |
-| Draft/applied/saved and Live/Preview modes | U; P inspected host mutates scene and queues saves | Transactional controller | Save failure leaves applied output intact; clear status and switch resolution | Implemented. Unit tests plus Windows smoke staging/Apply & Save |
-| Undo/redo | U; P documents object-edge undo | Bounded history | Undo/redo respects staging and locking | Implemented; unit-tested for mode awareness and locking |
-| AI command assistant and memory | P documented; host command routing inspected | Provider, secret storage, validated command API | Draft-only in Preview; cannot invoke Apply implicitly | Not started; drawer explains it is unavailable. Validated command boundary exists |
+| Named setups, save/load | F code; P documented compositions | Versioned schema, atomic persistence | Reload preserves geometry and settings; invalid file rejected | Partial: restore verified (Windows); setup UI implemented |
+| Portable projects with media | U; P says compositions do not package media | Export/import manifest and media copy | Move package between machines without absolute paths | Implemented |
+| Two windows, fullscreen, display choice | F code; P host code | Electron output lifecycle | Studio focus/panels do not recreate output or exit fullscreen | Verified (Windows, single display) |
+| Blackout | F code; U | Immediate operation path | Immediate black while media clock continues | Verified (Windows) |
+| Disconnect/reconnect | U; reference behavior unverified | Display event policy | No accidental projection onto laptop; explicit recovery | Implemented; physical test pending |
+| Draft/applied/saved and Live/Preview modes | U; P inspected host mutates scene and queues saves | Transactional controller | Save failure leaves applied output intact; clear status and switch resolution | Verified (Windows) |
+| Undo/redo | U; P documents object-edge undo | Bounded history | Undo/redo respects staging and locking | Implemented; unit-tested |
+| AI command assistant and memory | P documented; host command routing inspected | Provider, secret storage, validated command API | Draft-only in Preview; cannot invoke Apply implicitly | Not started; drawer explains |
 | Room/3D visualization | P documented simulated room/projectors/viewpoint | Three.js scene, calibrated coordinate model | Clearly separate simulation from physical measurement | Not started; control disabled |
-| Kinect, scan/replay, calibration | P documented demo/replay/prototype; physical verification pending | Hardware helper, fixtures, real device tests | Identify generated/replayed/live data; measured calibration error | Not started; hardware unavailable; control disabled |
+| Kinect, scan/replay, calibration | P documented demo/replay/prototype; physical verification pending | Hardware helper, fixtures, real device tests | Identify generated/replayed/live data; measured calibration error | Not started; hardware unavailable |
 | Curved/slow-moving object mapping | P documented experimental workflow; not qualified | Calibration, depth segmentation, tracking | Physical accuracy and latency measured; loss-of-track handling | Not started |
-| Sequencing/live slots | F code | Cue clock and transitions | User confirms need before prioritization | Deferred by user; scope decision to confirm |
-| Diagnostics and preview quality | F code for preview quality/FPS; P documented bounded transport | Timing counters, profiling fixtures | Report measured frame pacing/drop counts by source type | Partial. Preview fps, frames over 25 ms and decoder drops shown in studio. Output renderer probe measured once on Windows (local video, windowed). Capture/YouTube profiling not applicable yet |
+| Sequencing/live slots | F code | Cue clock and transitions | User confirms need before prioritization | Deferred: scope decision to confirm |
+| Diagnostics and preview quality | F code for preview quality/FPS; P documented bounded transport | Timing counters, profiling fixtures | Report measured frame pacing/drop counts by source type | Partial |
 
 ## Independent design decisions
 

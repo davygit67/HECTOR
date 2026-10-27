@@ -1,91 +1,58 @@
 # HECTOR contributor instructions
 
-These instructions apply to the entire repository. Follow the user's current instructions when they conflict with this file.
+Applies to the whole repository. The user's current instructions win on conflict.
 
-## Product and scope
+## Scope
 
-Build HECTOR as an independently implemented Windows/macOS desktop projection-mapping app using Electron, React, TypeScript, Vite, and a dedicated GPU renderer. A basic mapper is a runnable milestone, not the completed first release.
+- HECTOR is an independently implemented Windows/macOS projection-mapping app (Electron, React, TypeScript, Vite, WebGL). The first release is the full scope in `docs/FEATURE_PARITY.md`. The basic mapper is only a milestone. Never silently drop scope.
+- `docs/ROADMAP.md` is the single list of outstanding work, blockers and next steps. Update it instead of writing handoff notes, and don't log completed work that Git already records.
+- [projection-mapper](https://github.com/adknate05/projection-mapper) and [FREEkMapper](https://github.com/v-prgmr/FREEkMapper) are behavioral references only. Never copy, fork, merge, import or clone their code, assets or history.
 
-Study these projects as behavioral and architectural references only:
+## Workflow
 
-- https://github.com/adknate05/projection-mapper
-- https://github.com/v-prgmr/FREEkMapper
+- Inspect `git status` first and preserve unrelated work. Work on a feature branch, never directly on `main`. Never force-push.
+- Keep every milestone runnable. Make reasonable decisions; ask only when genuinely blocked.
+- Before calling work done, run `npm run check` and `npm run smoke` and fix failures.
+- Commit coherent changes after inspecting the staged diff. Exclude credentials, private media, local profiles and build output.
+- End a session by reporting: what works, what was tested on which platform, what is incomplete or blocked, and the exact launch command.
 
-Do not copy, fork, merge, or import their code, assets, or Git history. Record source links and evidence in `docs/FEATURE_PARITY.md`. Distinguish inspected implementation, documented claims, proposals, prototypes, and hardware behavior that has not been verified. If access fails, mark the audit incomplete and continue independent work. If the FREEkMapper identity becomes ambiguous, ask for the exact URL.
+## Architecture constraints
 
-Keep the broader feature scope in the parity document and `docs/ROADMAP.md`: mapping and masks; layers and groups; local media and capture; YouTube/live sources; ambient lighting and effects; generated visuals, clocks and timers; named and portable projects; command-based AI; room visualization, Kinect/scanning, calibration, and object mapping. Do not silently drop features. Show sequencing is deprioritized by the user; record it as a scope decision awaiting confirmation.
+See `docs/ARCHITECTURE.md`. Non-negotiable:
 
-## Before changing code
+- Keep these separate: the Electron host (lifecycle, displays, files, permissions, IPC), the React studio UI, the serializable scene model with its commands and undo, media sources and clocks, the GPU renderer, and optional AI/hardware adapters.
+- React never drives frames. UI activity (selection, panels, AI) must not recreate the output window, reset playback, or rebuild unchanged media or captures. No per-frame IPC or JPEG/base64 frame transport. Preview and output quality are independent.
+- The main process owns draft, applied and saved state:
+  - **Preview & Apply:** edits stay in the draft. Apply & Save validates and persists before publishing; if that fails, output and draft both stay as they were.
+  - **Live Edit:** edits publish immediately. Switching to Live with pending changes requires Apply, Discard or Cancel.
+  - Undo/redo obey the active mode.
+  - Draft edits must never release media or captures used by applied output.
+  - AI uses the same validated commands and never bypasses Apply.
+- Blackout and play/pause/seek are immediate operational controls, distinct from staged scene edits.
 
-- Inspect Git status and applicable instructions. Preserve unrelated changes and existing work.
-- Read the README, architecture, parity, and roadmap documents when present.
-- Work on a feature branch, never directly on `main`.
-- Check available tools and reference access without requesting pasted credentials or exposing secrets.
-- Make reasonable implementation decisions independently. Ask only when information is genuinely blocking.
-- Keep each milestone runnable; do not stop at a mockup or plan when implementation is requested.
+## Desktop security
 
-## Architecture boundaries
+- `contextIsolation`, `sandbox`, no `nodeIntegration`. IPC is narrow and Zod-validated. Check the sender window and main frame; only the Studio may mutate state.
+- Secrets and filesystem paths stay in main. Media files and screen captures are reachable only through explicit user grants (file dialog, capture picker).
+- Deny navigation, new windows, webviews and any permission not tied to a granted workflow.
+- Output is a separate content-only window: no controls or cursor. Studio focus must not exit its fullscreen, and a display disconnect hides it rather than moving it.
 
-Keep these responsibilities separate:
+## Honesty
 
-1. Electron desktop lifecycle, display management, filesystem access, permissions, and IPC.
-2. React studio interface and editor interaction.
-3. Serializable project/scene model, validation, commands, and undo/redo.
-4. Media sources, decoder ownership, and playback clocks.
-5. GPU projection rendering, warping, and compositing.
-6. Optional AI providers and hardware adapters.
+- No controls that pretend to work. Unavailable features stay disabled with an explanation.
+- Qualify Windows and macOS separately. Mocks, simulations and CI are not interactive or hardware qualification. Record results in `docs/QUALIFICATION.md`.
+- Make no performance claims without measurements. Signing, notarization and hardware checks stay "pending" until actually performed.
 
-React must not drive frame rendering. UI selection, panels, or AI activity must not recreate the output window, reset playback, or rebuild unchanged media. Reuse decoders/textures where playback semantics allow, bound queues, discard obsolete frames, and dispose unused resources. Prefer direct media/GPU paths over per-frame JPEG/base64 transport. Preview quality and output quality are independent settings.
+## Commands
 
-## Editing contract
+Node 22.12+. In Windows PowerShell use `npm.cmd`.
 
-Maintain explicit **draft**, **applied**, and **saved** state.
-
-- **Live Edit:** scene edits publish immediately; Save persists the current setup; unsaved changes remain visible.
-- **Preview & Apply:** scene edits affect only the studio preview. Output retains the last applied scene and ongoing playback.
-- **Apply & Save:** validate and successfully persist the draft before publishing it. A save failure retains both the current output and the draft and reports the error.
-- **Discard:** restore draft from applied state.
-- Switching to Live Edit with pending changes requires Apply or Discard, with Cancel available.
-- Applying geometry or effects preserves unchanged media playback.
-- Draft removal must not dispose a source still referenced by applied output. Undo/redo must obey the active editing mode.
-- Clearly distinguish immediate operational controls, such as emergency blackout, from staged scene edits. Document playback-control semantics.
-- AI uses the same validated commands as manual editing and must never bypass Apply.
-
-## Desktop and security
-
-- Use context isolation, no renderer Node integration, and sandboxing where supported.
-- Expose a narrow, validated IPC API. Validate payloads, sender identity, and sender frame; restrict privileged mutations to the studio.
-- Keep secrets and privileged file access out of the renderer. Do not commit credentials, local profiles, private media, or generated builds.
-- Deny unexpected navigation, new windows, and permissions. Grant capture/file access only through explicit supported workflows.
-- Keep a separate studio window and independent content-only output window. Output has no editor handles, toolbar, or cursor.
-- Support output display selection, blackout, windowed/fullscreen operation, and display disconnect/reconnect handling. Studio focus must not exit output fullscreen.
-- Qualify Windows and macOS separately; do not infer physical display behavior from mocks or from the other platform.
-
-## Interface and integrations
-
-Use a readable dark interface: Media/Layers/Setups left, mapping canvas center, Transform/Crop/Effects right, compact playback below, and mode/status/save/output/blackout above. Panels should be resizable or collapsible; AI is an optional drawer.
-
-Do not create controls that pretend to work. Keep unavailable capabilities visibly disabled with useful explanations. State actual platform, hardware, service, and licensing limits. A simulated room, generated sensor feed, or mocked adapter is not verified physical calibration or Kinect support.
-
-## Validation and documentation
-
-- Choose compatible stable dependencies and commit the lockfile. Document supported Node versions and exact launch commands.
-- Add focused behavioral tests for draft/live isolation, apply/save failures, undo/redo, persistence validation, media continuity, and output lifecycle.
-- Run relevant type, build, and test checks; fix failures before reporting the milestone as working.
-- Configure Windows and macOS CI and packaging. Signing/notarization and physical-device checks must be labeled pending until performed.
-- Measure frame pacing and dropped frames. Profile local media, capture, and YouTube separately. Never claim lag-free output or a frame-rate guarantee without measurements.
-- Keep `README.md`, `docs/FEATURE_PARITY.md`, `docs/ARCHITECTURE.md`, and `docs/ROADMAP.md` aligned with actual behavior. Attribute third-party dependencies/assets.
-- Record precise handoff steps when work spans sessions, including the last working milestone and unresolved failures.
-
-## Git and session handoff
-
-Use coherent commits if Git identity is configured. Inspect diffs and staged files before committing or publishing; exclude credentials, private media, generated output, and unrelated changes. Never force-push, overwrite unrelated work, or push directly to `main`. Do not imply a commit received human review when it did not.
-
-End each work session with:
-
-- What now works.
-- What was tested and on which platform.
-- What remains incomplete or blocked.
-- The exact command to launch the current build, or an explicit statement that no runnable build exists yet.
-
-When the full scope does not fit in one session, report the milestone honestly and preserve the remaining release scope for continuation.
+```
+npm ci                      # install
+npm run electron:install    # fetch the Electron binary (first run)
+npm run dev                 # develop: Vite + Electron
+npm run check               # unit tests, typecheck, build
+npm run smoke               # drive the built app (after check/build)
+npm start                   # production build + launch
+npm run dist                # unsigned installers/archives into release/
+```

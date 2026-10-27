@@ -19,7 +19,8 @@
     "electron:install": "install-electron",
     "presmoke": "install-electron",
     "smoke": "node scripts/smoke.mjs",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder --dir --publish never",
+    "dist": "npm run build && electron-builder --publish never"
   },
   "dependencies": {
     "react": "19.3.1",
