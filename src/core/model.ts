@@ -4,8 +4,11 @@ const number = z.number().finite();
 export const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);
 const point = z.tuple([number.min(-2).max(3), number.min(-2).max(3)]);
 export const sourceSchema = z.object({
-  id: idSchema, name: z.string().min(1).max(160), kind: z.enum(['image', 'video', 'gradient', 'grid', 'clock']),
-  assetId: idSchema.optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  id: idSchema, name: z.string().min(1).max(160), kind: z.enum(['image', 'video', 'gradient', 'grid', 'clock', 'capture']),
+  /** Local file grant (image/video). */
+  assetId: idSchema.optional(),
+  /** Live screen/window grant (capture). Grants are session-only; a restored capture must be reconnected. */
+  captureId: idSchema.optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   loop: z.boolean(), speed: number.min(0.1).max(4), volume: number.min(0).max(1)
 }).strict();
 const surfaceFields = z.object({
@@ -30,7 +33,10 @@ export const sceneSchema = z.object({
 }).strict().superRefine((s, ctx) => {
   for (const list of [s.sources, s.surfaces]) if (new Set(list.map(x => x.id)).size !== list.length) ctx.addIssue({ code: 'custom', message: 'Duplicate IDs.' });
   for (const surface of s.surfaces) if (surface.sourceId && !s.sources.some(x => x.id === surface.sourceId)) ctx.addIssue({ code: 'custom', message: 'Unknown source.' });
-  for (const source of s.sources) if (['image', 'video'].includes(source.kind) && !source.assetId) ctx.addIssue({ code: 'custom', message: 'Local media requires an asset.' });
+  for (const source of s.sources) {
+    if (['image', 'video'].includes(source.kind) && !source.assetId) ctx.addIssue({ code: 'custom', message: 'Local media requires an asset.' });
+    if (source.kind === 'capture' && !source.captureId) ctx.addIssue({ code: 'custom', message: 'Capture requires a capture grant.' });
+  }
 });
 export type Scene = z.infer<typeof sceneSchema>;
 export type Source = z.infer<typeof sourceSchema>;
@@ -40,6 +46,9 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('surface.add'), surface: surfaceSchema }).strict(),
   z.object({ type: z.literal('surface.update'), id: idSchema, patch: surfaceFields.partial().omit({ id: true }) }).strict(),
   z.object({ type: z.literal('surface.remove'), id: idSchema }).strict(),
+  /** Relative edits resolve against the authoritative draft, so rapid repeats (held arrow keys) never overwrite each other. */
+  z.object({ type: z.literal('surface.nudge'), id: idSchema, corner: z.number().int().min(-1).max(3), dx: number.min(-1).max(1), dy: number.min(-1).max(1) }).strict(),
+  z.object({ type: z.literal('surface.transform'), id: idSchema, rotate: number.min(-Math.PI).max(Math.PI), scale: number.min(0.1).max(10) }).strict(),
   z.object({ type: z.literal('surface.move'), id: idSchema, direction: z.union([z.literal(-1), z.literal(1)]) }).strict(),
   z.object({ type: z.literal('source.put'), source: sourceSchema }).strict(),
   z.object({ type: z.literal('source.remove'), id: idSchema }).strict(),
@@ -64,6 +73,18 @@ export function reduceScene(scene: Scene, raw: unknown): Scene {
     case 'surface.update':
       if (surface!.locked && Object.keys(command.patch).some(k => k !== 'locked')) throw new Error('Unlock the surface before editing.');
       Object.assign(surface!, command.patch); break;
+    case 'surface.nudge':
+      if (surface!.locked) throw new Error('Unlock the surface before editing.');
+      surface!.corners = surface!.corners.map((c, i) => command.corner < 0 || i === command.corner ? [c[0] + command.dx, c[1] + command.dy] : c) as Surface['corners'];
+      break;
+    case 'surface.transform': {
+      if (surface!.locked) throw new Error('Unlock the surface before editing.');
+      // Rotate in output pixels (not normalized units) so shapes don't skew on non-square scenes.
+      const cx = surface!.corners.reduce((a, p) => a + p[0], 0) / 4, cy = surface!.corners.reduce((a, p) => a + p[1], 0) / 4;
+      const cos = Math.cos(command.rotate), sin = Math.sin(command.rotate), aspect = next.width / next.height;
+      surface!.corners = surface!.corners.map(([x, y]) => [cx + ((x - cx) * cos - (y - cy) * sin / aspect) * command.scale, cy + ((x - cx) * sin * aspect + (y - cy) * cos) * command.scale]) as Surface['corners'];
+      break;
+    }
     case 'surface.remove':
       if (surface!.locked) throw new Error('Unlock the surface before deleting.');
       next.surfaces = next.surfaces.filter(s => s.id !== command.id); break;

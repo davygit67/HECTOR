@@ -18,7 +18,9 @@
     "check": "npm run test && npm run build",
     "electron:install": "install-electron",
     "presmoke": "install-electron",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "npm run build && playwright test --project=qualification",
+    "premeasure": "install-electron",
+    "measure": "npm run build && playwright test --project=pacing",
     "package": "npm run build && electron-builder --dir --publish never",
     "dist": "npm run build && electron-builder --publish never"
   },

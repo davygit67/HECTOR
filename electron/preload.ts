@@ -3,6 +3,8 @@ import type { Bridge } from '../src/core/bridge';
 const bridge: Bridge = {
   snapshot: () => ipcRenderer.invoke('hector:snapshot'),
   request: request => ipcRenderer.invoke('hector:request', request),
-  subscribe: callback => { const handler = (_: unknown, value: Parameters<typeof callback>[0]) => callback(value); ipcRenderer.on('hector:state', handler); return () => ipcRenderer.removeListener('hector:state', handler); }
+  subscribe: callback => { const handler = (_: unknown, value: Parameters<typeof callback>[0]) => callback(value); ipcRenderer.on('hector:state', handler); return () => ipcRenderer.removeListener('hector:state', handler); },
+  armCapture: captureId => ipcRenderer.invoke('hector:arm-capture', captureId),
+  report: status => ipcRenderer.send('hector:report', status)
 };
 contextBridge.exposeInMainWorld('hector', bridge);

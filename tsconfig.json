@@ -5,5 +5,5 @@
     "noEmit": true, "esModuleInterop": true, "skipLibCheck": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "electron", "tests", "vite.config.ts"]
+  "include": ["src", "electron", "tests", "e2e", "vite.config.ts", "playwright.config.ts"]
 }

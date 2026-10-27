@@ -71,3 +71,23 @@ describe('asset reachability', () => {
     expect(assetIds(session)).toEqual(new Set(['applied-asset']));
   });
 });
+describe('relative surface commands', () => {
+  it('accumulates nudges and transforms around the centroid against the current draft', () => {
+    let scene = initialScene();
+    for (let i = 0; i < 3; i++) scene = reduceScene(scene, { type: 'surface.nudge', id: 'surface-1', corner: 1, dx: 1 / 1920, dy: 0 });
+    expect(scene.surfaces[0].corners[1][0]).toBeCloseTo(0.85 + 3 / 1920, 10);
+    expect(scene.surfaces[0].corners[0]).toEqual([0.15, 0.15]);
+    scene = reduceScene(scene, { type: 'surface.nudge', id: 'surface-1', corner: -1, dx: 0.1, dy: 0 });
+    expect(scene.surfaces[0].corners[0][0]).toBeCloseTo(0.25, 10);
+    const before = scene.surfaces[0].corners, center = (c: number[][], axis: number) => c.reduce((a, p) => a + p[axis], 0) / 4;
+    scene = reduceScene(scene, { type: 'surface.transform', id: 'surface-1', rotate: Math.PI / 12, scale: 1.05 });
+    expect(center(scene.surfaces[0].corners, 0)).toBeCloseTo(center(before, 0), 10);
+    expect(center(scene.surfaces[0].corners, 1)).toBeCloseTo(center(before, 1), 10);
+    const locked = reduceScene(scene, { type: 'surface.update', id: 'surface-1', patch: { locked: true } });
+    expect(() => reduceScene(locked, { type: 'surface.nudge', id: 'surface-1', corner: 0, dx: 0.01, dy: 0 })).toThrow(/Unlock/);
+    expect(() => reduceScene(locked, { type: 'surface.transform', id: 'surface-1', rotate: 0, scale: 2 })).toThrow(/Unlock/);
+  });
+  it('rejects a nudge that would fold the quad', () => {
+    expect(() => reduceScene(initialScene(), { type: 'surface.nudge', id: 'surface-1', corner: 0, dx: 0.9, dy: 0 })).toThrow();
+  });
+});

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { Request, Snapshot } from './core/bridge';
+import type { CaptureChoice, Request, Snapshot } from './core/bridge';
 import { newSurface, surfaceSchema, type Point, type Scene, type Source, type Surface } from './core/model';
 import { ProjectionRenderer, type Diagnostics } from './render/renderer';
 import './style.css';
@@ -10,13 +10,16 @@ const emptyDiagnostics: Diagnostics = { fps: 0, slowFrames: 0, videoDropped: 0, 
 function Viewport({ scene, snapshot, quality, onDiagnostics, onError }: { scene: Scene; snapshot: Snapshot; quality: number; onDiagnostics: (d: Diagnostics) => void; onError: (e: string) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null), renderer = useRef<ProjectionRenderer | null>(null);
   useEffect(() => {
-    try { renderer.current = new ProjectionRenderer(canvas.current!, isOutput, onDiagnostics); window.hectorProbe = () => renderer.current?.probe() ?? null; }
+    try {
+      const instance = renderer.current = new ProjectionRenderer(canvas.current!, isOutput, onDiagnostics);
+      window.hectorProbe = { snapshot: () => instance.probe(), startTrace: () => instance.startTrace(), stopTrace: () => instance.stopTrace() };
+    }
     catch (e) { onError(String(e)); }
     const lost = (event: Event) => { event.preventDefault(); onError('GPU context lost. Close and reopen output, or restart HECTOR after saving.'); };
     const element = canvas.current!; element.addEventListener('webglcontextlost', lost);
     return () => { element.removeEventListener('webglcontextlost', lost); renderer.current?.dispose(); };
   }, [onDiagnostics, onError]);
-  useEffect(() => { renderer.current?.update(scene, snapshot.assets, snapshot.transport, isOutput && snapshot.output.blackout); }, [scene, snapshot]);
+  useEffect(() => { renderer.current?.update(scene, snapshot.assets, snapshot.captures, snapshot.transport, isOutput && snapshot.output.blackout); }, [scene, snapshot]);
   useEffect(() => { renderer.current?.setQuality(quality); }, [quality]);
   return <canvas ref={canvas} className="projection" aria-label={isOutput ? 'Projection output' : 'Draft preview'} />;
 }
@@ -32,7 +35,9 @@ function App() {
   const [left, setLeft] = useState(true), [right, setRight] = useState(true), [collapsed, setCollapsed] = useState<string[]>([]);
   const [dragCorners, setDragCorners] = useState<Surface['corners'] | null>(null), [corner, setCorner] = useState(0), [pending, setPending] = useState(false);
   const gesture = useRef<{ surface: Surface; index: number; start: Point; corners: Surface['corners'] } | null>(null);
-  const svg = useRef<SVGSVGElement>(null);
+  const svg = useRef<SVGSVGElement>(null), reported = useRef('');
+  const [setupName, setSetupName] = useState(''), [picker, setPicker] = useState<{ replace?: string } | null>(null);
+  const [choices, setChoices] = useState<CaptureChoice[] | null>(null), [pickerTab, setPickerTab] = useState<'screen' | 'window'>('screen');
   const onError = useCallback((message: string) => setError(message), []);
   useEffect(() => {
     if (!window.hector) { setError('HECTOR requires its desktop host. Launch with npm run dev.'); return; }
@@ -50,40 +55,49 @@ function App() {
   useEffect(() => {
     if (isOutput) return;
     const keydown = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement).closest('input, textarea, select, button') || switchDialog) return;
+      // Shortcuts work while a button has focus; only text entry keeps its own keys.
+      if ((event.target as HTMLElement).closest('input, textarea, select') || switchDialog || picker) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); void send({ type: event.shiftKey ? 'redo' : 'undo' }); }
       else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void send({ type: state?.mode === 'preview' ? 'apply' : 'save' }); }
       else if (surface && !surface.locked && scene && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
         event.preventDefault(); const amount = event.shiftKey ? 10 : 1;
         const dx = (event.key === 'ArrowRight' ? amount : event.key === 'ArrowLeft' ? -amount : 0) / scene.width;
         const dy = (event.key === 'ArrowDown' ? amount : event.key === 'ArrowUp' ? -amount : 0) / scene.height;
-        const corners = structuredClone(surface.corners); corners[corner] = [corners[corner][0] + dx, corners[corner][1] + dy];
-        void send({ type: 'command', command: { type: 'surface.update', id: surface.id, patch: { corners } } });
+        void send({ type: 'command', command: { type: 'surface.nudge', id: surface.id, corner, dx, dy } });
       }
     };
     window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown);
-  }, [surface, scene, corner, send, state?.mode, switchDialog]);
+  }, [surface, scene, corner, send, state?.mode, switchDialog, picker]);
+  // Output forwards its media/capture problems so the operator sees them in the studio.
+  useEffect(() => {
+    if (!isOutput || !window.hector) return;
+    const errors = [...new Set(diagnostics.errors)].slice(0, 16).map(e => e.slice(0, 300)), key = JSON.stringify(errors);
+    if (key !== reported.current) { reported.current = key; window.hector.report({ errors }); }
+  }, [diagnostics]);
+  const listCaptures = useCallback(async () => {
+    setChoices(null);
+    try { const result = await window.hector!.request({ type: 'capture.sources' }); if (!result.ok) setError(result.error ?? 'Capture sources unavailable'); setChoices(result.choices ?? []); }
+    catch (e) { setError(String(e)); setChoices([]); }
+  }, []);
+  const openPicker = (replace?: string) => { setPicker({ replace }); void listCaptures(); };
   if (!snapshot || !scene || !state) return <div className="loading"><b>HECTOR</b><p>{error || 'Opening projection studio…'}</p></div>;
   if (isOutput) return <main className="output"><Viewport scene={state.applied} snapshot={snapshot} quality={1} onDiagnostics={setDiagnostics} onError={onError} /></main>;
   const selectedDisplay = display ?? snapshot.displays.find(d => !d.primary)?.id ?? snapshot.displays[0]?.id;
   const previewScene = dragCorners && surface ? { ...scene, surfaces: scene.surfaces.map(s => s.id === surface.id ? { ...s, corners: dragCorners } : s) } : scene;
   const point = (event: React.PointerEvent): Point => { const bounds = svg.current!.getBoundingClientRect(); return [(event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height]; };
   const dragStart = (event: React.PointerEvent, item: Surface, index: number) => {
-    event.stopPropagation(); setSelected(item.id); if (item.locked || pending) return;
+    event.stopPropagation(); setSelected(item.id); svg.current?.focus(); if (item.locked || pending) return;
     setCorner(Math.max(0, index)); gesture.current = { surface: item, index, start: point(event), corners: structuredClone(item.corners) };
     svg.current!.setPointerCapture(event.pointerId);
   };
   const finishDrag = () => {
     const current = gesture.current; gesture.current = null;
-    if (current && dragCorners) void send({ type: 'command', command: { type: 'surface.update', id: current.surface.id, patch: { corners: dragCorners } } });
-    setDragCorners(null);
+    // Keep the dragged shape until the committed edit arrives, so the surface never snaps back mid-request.
+    if (current && dragCorners) void send({ type: 'command', command: { type: 'surface.update', id: current.surface.id, patch: { corners: dragCorners } } }).finally(() => setDragCorners(null));
+    else setDragCorners(null);
   };
   const sourceUpdate = (patch: Partial<Source>) => { if (source) void send({ type: 'command', command: { type: 'source.put', source: { ...source, ...patch } } }); };
-  const transform = (rotation: number, scale: number) => {
-    if (!surface) return; const cx = surface.corners.reduce((a,p) => a+p[0],0)/4, cy = surface.corners.reduce((a,p) => a+p[1],0)/4;
-    const cos = Math.cos(rotation), sin = Math.sin(rotation), aspect = scene.width/scene.height;
-    update({ corners: surface.corners.map(([x,y]) => [cx+((x-cx)*cos-(y-cy)*sin/aspect)*scale, cy+((x-cx)*sin*aspect+(y-cy)*cos)*scale]) as Surface['corners'] });
-  };
+  const transform = (rotate: number, scale: number) => { if (surface) void send({ type: 'command', command: { type: 'surface.transform', id: surface.id, rotate, scale } }); };
   const createSource = (kind: 'gradient' | 'grid' | 'clock') => void send({ type: 'command', command: { type: 'source.put', source: { id: crypto.randomUUID(), name: kind === 'clock' ? 'Elapsed clock' : kind === 'grid' ? 'Calibration grid' : 'Aurora gradient', kind, color: '#8f72ff', loop: true, speed: 1, volume: 0 } } });
   const groups = [...new Set(scene.surfaces.map(s => s.group))];
   return <div className="app">
@@ -100,6 +114,7 @@ function App() {
     <div className="projectbar"><div><input aria-label="Project name" key={scene.name} defaultValue={scene.name} onBlur={e => { if (e.target.value !== scene.name) void send({ type: 'command', command: { type: 'scene.rename', name: e.target.value } }); }} /><span className="badge">WORKING MILESTONE · 0.1</span></div>
       <div className="row"><button onClick={() => void send({ type: 'open' })}>Open project</button><button title="Export draft plus media into a portable project" onClick={() => void send({ type: 'export' })}>Export portable</button><button onClick={() => setAi(!ai)}>AI assistant</button></div></div>
     {error && <div role="alert" className="error"><span>{error}</span><button onClick={() => setError('')}>Dismiss</button></div>}
+    {snapshot.output.errors.length > 0 && <div role="status" className="error">Output: {snapshot.output.errors.join(' · ')}</div>}
     {snapshot.output.disconnected && <div className="error">Output display disconnected. Output is hidden and blacked out. Select a display, reopen output, then Restore output.</div>}
     <div className="workspace">
       {left && <aside className="left-panel"><nav className="tabs">{['Media', 'Layers', 'Setups'].map(t => <button className={tab === t ? 'selected' : ''} key={t} onClick={() => setTab(t)}>{t}</button>)}</nav>
@@ -110,16 +125,17 @@ function App() {
               <button aria-label={`Visibility ${s.name}`} disabled={s.locked} onClick={() => void send({ type: 'command', command: { type: 'surface.update', id: s.id, patch: { visible: !s.visible } } })}>{s.visible ? '◉' : '○'}</button>
               <button aria-label={`Lock ${s.name}`} title={s.locked ? 'Unlock' : 'Lock'} onClick={() => void send({ type: 'command', command: { type: 'surface.update', id: s.id, patch: { locked: !s.locked } } })}>{s.locked ? '■' : '□'}</button></div>)}</section>)}</div>
           <div className="panel-note">Layers composite from bottom to top. Select a corner and use arrow keys to nudge; Shift moves 10 pixels.</div></>}
-        {tab === 'Media' && <div className="panel-content"><button className="import" onClick={() => void send({ type: 'import' })}>＋ Import images / videos</button><div className="media-grid">{scene.sources.map(s => <div className="media-card" key={s.id}><div className={'thumbnail '+s.kind}>{s.kind === 'video' ? '▶' : s.kind === 'clock' ? '00:00' : s.kind === 'image' ? '▧' : '✧'}</div><b>{s.name}</b><small>{s.kind.toUpperCase()}</small><button disabled={!surface || surface.locked} onClick={() => update({ sourceId: s.id })}>Use on surface</button>{s.assetId && <button onClick={() => void send({ type: 'relink', assetId: s.assetId! })}>{snapshot.assets[s.assetId]?.missing ? 'Missing · Relink' : 'Relink file'}</button>}<button className="subtle" onClick={() => void send({ type: 'command', command: { type: 'source.remove', id: s.id } })}>Remove source</button></div>)}</div>
+        {tab === 'Media' && <div className="panel-content"><button className="import" onClick={() => void send({ type: 'import' })}>＋ Import images / videos</button><div className="media-grid">{scene.sources.map(s => <div className="media-card" key={s.id}><div className={'thumbnail '+s.kind}>{s.kind === 'video' ? '▶' : s.kind === 'clock' ? '00:00' : s.kind === 'image' ? '▧' : s.kind === 'capture' ? 'LIVE' : '✧'}</div><b>{s.name}</b><small>{s.kind === 'capture' ? (s.captureId && snapshot.captures[s.captureId] ? `LIVE ${snapshot.captures[s.captureId].kind.toUpperCase()} CAPTURE` : 'CAPTURE · NOT CONNECTED') : s.kind.toUpperCase()}</small><button disabled={!surface || surface.locked} onClick={() => update({ sourceId: s.id })}>Use on surface</button>{s.assetId && <button onClick={() => void send({ type: 'relink', assetId: s.assetId! })}>{snapshot.assets[s.assetId]?.missing ? 'Missing · Relink' : 'Relink file'}</button>}{s.kind === 'capture' && <button onClick={() => openPicker(s.id)}>{s.captureId && snapshot.captures[s.captureId] ? 'Change capture source' : 'Choose capture source'}</button>}<button className="subtle" onClick={() => void send({ type: 'command', command: { type: 'source.remove', id: s.id } })}>Remove source</button></div>)}</div>
           <p className="eyebrow">GENERATORS</p><div className="stack"><button onClick={() => createSource('gradient')}>＋ Aurora gradient</button><button onClick={() => createSource('grid')}>＋ Calibration grid</button><button onClick={() => createSource('clock')}>＋ Elapsed clock</button></div>
-          <p className="eyebrow">PLANNED SOURCES</p><button disabled>Screen / window capture</button><p className="hint">OS permission and capture adapter pending.</p><button disabled>YouTube / live stream</button><p className="hint">Sandboxed service playback adapter pending. No URL is downloaded or played.</p></div>}
-        {tab === 'Setups' && <div className="panel-content"><p className="hint">Named snapshots of the draft. Recall follows the current editing mode.</p><button className="primary" onClick={() => void send({ type: 'setup.save', name: scene.name })}>Save named setup</button>{snapshot.setups.map(name => <button className="setup" key={name} onClick={() => void send({ type: 'setup.load', name })}><span>▧ {name}</span><small>Recall</small></button>)}<p className="hint">Names may contain letters, numbers, spaces, underscores and hyphens. Portable export copies media; named setups reference local files.</p></div>}
+          <p className="eyebrow">LIVE SOURCES</p><button onClick={() => openPicker()}>＋ Screen / window capture</button><p className="hint">Video only, no audio. Captures do not resume automatically after a restart; reconnect them here.{snapshot.platform === 'darwin' && snapshot.captureAccess !== 'granted' ? ' macOS needs Screen Recording permission (System Settings › Privacy & Security).' : ''}</p>
+          <p className="eyebrow">PLANNED SOURCES</p><button disabled>YouTube / live stream</button><p className="hint">Sandboxed service playback adapter pending. No URL is downloaded or played.</p></div>}
+        {tab === 'Setups' && <div className="panel-content"><p className="hint">Named snapshots of the draft. Recall follows the current editing mode.</p><label className="field"><span>Setup name</span><input aria-label="Setup name" value={setupName} placeholder={scene.name} maxLength={80} onChange={e => setSetupName(e.target.value)}/></label><button className="primary" onClick={async () => { if (await send({ type: 'setup.save', name: setupName.trim() || scene.name })) setSetupName(''); }}>Save named setup</button>{snapshot.setups.map(name => <button className="setup" key={name} onClick={() => void send({ type: 'setup.load', name })}><span>▧ {name}</span><small>Recall</small></button>)}<p className="hint">Names may contain letters, numbers, spaces, underscores and hyphens. Portable export copies media; named setups reference local files.</p></div>}
         <div className="sidebar-bottom"><span className="dot live"/> LOCAL WORKSPACE <button onClick={() => setLeft(false)} aria-label="Collapse library">‹</button></div>
       </aside>}
       <main className="center"><div className="canvas-toolbar"><div className="row">{!left && <button onClick={() => setLeft(true)}>Library ›</button>}<span className="eyebrow">MAPPING CANVAS</span><span className="badge">DRAFT</span></div><div className="row"><button disabled={!state.canUndo || pending} onClick={() => void send({ type: 'undo' })}>↶ Undo</button><button disabled={!state.canRedo || pending} onClick={() => void send({ type: 'redo' })}>↷ Redo</button><button disabled={!state.unapplied || pending} onClick={() => void send({ type: 'discard' })}>Discard</button><button onClick={() => setRight(!right)}>{right ? 'Hide inspector' : 'Inspector ‹'}</button></div></div>
         <div className="canvas-space"><div className="canvas-label"><span>{scene.width} × {scene.height}</span><span>{state.mode === 'preview' ? 'Changes stay here until applied' : 'LIVE · changes publish immediately'}</span></div>
           <div className="canvas-frame" style={{ aspectRatio: `${scene.width}/${scene.height}` }}><Viewport scene={previewScene} snapshot={snapshot} quality={quality} onDiagnostics={setDiagnostics} onError={onError}/>
-            <svg ref={svg} className="handles" viewBox="0 0 1920 1080" preserveAspectRatio="none" onPointerMove={event => {
+            <svg ref={svg} className="handles" tabIndex={0} aria-label="Mapping canvas" viewBox="0 0 1920 1080" preserveAspectRatio="none" onPointerMove={event => {
               const current = gesture.current; if (!current) return; const p = point(event), delta: Point = [p[0]-current.start[0],p[1]-current.start[1]];
               const factor = event.altKey ? .1 : 1;
               const corners = current.corners.map((c,i) => current.index < 0 || i === current.index ? [c[0]+delta[0]*factor,c[1]+delta[1]*factor] : [...c]) as Surface['corners'];
@@ -138,12 +154,22 @@ function App() {
             <label className="field"><span>Group</span><input key={surface.group} defaultValue={surface.group} placeholder="Ungrouped" onBlur={e => update({ group: e.target.value })}/></label><div className="row"><button onClick={() => void send({ type: 'command', command: { type: 'surface.move', id: surface.id, direction: 1 } })}>Move up</button><button onClick={() => void send({ type: 'command', command: { type: 'surface.move', id: surface.id, direction: -1 } })}>Move down</button></div><button className="danger-text" onClick={() => void send({ type: 'command', command: { type: 'surface.remove', id: surface.id } })}>Delete surface</button></>}
           {inspector === 'Crop' && <><p className="hint">Trim the source before warping. Values are percentages from each edge.</p>{['Left','Top','Right','Bottom'].map((label,i) => <NumberField key={label} label={label} value={surface.crop[i]*100} min={0} max={95} onChange={n => { const crop = [...surface.crop] as Surface['crop']; crop[i] = n/100; update({ crop }); }}/>)}</>}
           {inspector === 'Effects' && <><NumberField label="Opacity" value={surface.opacity} min={0} max={1} step={.05} onChange={opacity => update({ opacity })}/><NumberField label="Brightness" value={surface.brightness} min={0} max={2} step={.05} onChange={brightness => update({ brightness })}/><NumberField label="Saturation" value={surface.saturation} min={0} max={2} step={.05} onChange={saturation => update({ saturation })}/><label className="field"><span>Mask</span><select value={surface.mask} onChange={e => update({ mask: e.target.value as Surface['mask'] })}><option value="none">None</option><option value="ellipse">Ellipse</option></select></label>{source && <label className="field"><span>Generator color</span><input type="color" value={source.color} onChange={e => sourceUpdate({ color: e.target.value })}/></label>}<p className="hint">Effects and crop are scene edits. They publish only on Apply in Preview mode.</p><button disabled>Ambient backlight</button><p className="hint">Source-color sampling and spatial light compositing are planned.</p></>}
-        </fieldset><div className="inspector-divider"/><p className="eyebrow">SOURCE SETTINGS · STAGED</p>{source ? <><NumberField label="Playback speed" value={source.speed} min={.1} max={4} step={.1} onChange={speed => sourceUpdate({ speed })}/><NumberField label="Output volume" value={source.volume} min={0} max={1} step={.05} onChange={volume => sourceUpdate({ volume })}/><label className="check"><input type="checkbox" checked={source.loop} onChange={e => sourceUpdate({ loop: e.target.checked })}/> Loop media</label><p className="hint">Studio preview is always muted. Output starts muted until volume is changed and applied.</p></> : <p className="hint">Assign a source from the Media library.</p>}</div>}
+        </fieldset><div className="inspector-divider"/><p className="eyebrow">SOURCE SETTINGS · STAGED</p>{source?.kind === 'capture' ? <p className="hint">Live capture is always running: play/pause, seek, loop, speed and volume do not apply, and no audio is captured. Crop, effects, masks and layering work as for any source.</p> : source ? <><NumberField label="Playback speed" value={source.speed} min={.1} max={4} step={.1} onChange={speed => sourceUpdate({ speed })}/><NumberField label="Output volume" value={source.volume} min={0} max={1} step={.05} onChange={volume => sourceUpdate({ volume })}/><label className="check"><input type="checkbox" checked={source.loop} onChange={e => sourceUpdate({ loop: e.target.checked })}/> Loop media</label><p className="hint">Studio preview is always muted. Output starts muted until volume is changed and applied.</p></> : <p className="hint">Assign a source from the Media library.</p>}</div>}
       </aside>}
     </div>
     {diagnostics.errors.length > 0 && <div className="error">{[...new Set(diagnostics.errors)].join(' · ')}</div>}
     {ai && <section className="ai-drawer"><div><b>Assistant & spatial tools</b><button onClick={() => setAi(false)}>Close</button></div><p>AI provider integration is not connected. The command boundary is ready; a provider must use the same draft/live rules. No prompt or media is sent anywhere.</p><button disabled>Send to assistant</button><button disabled>3D room</button><button disabled>Kinect / calibration</button><small>Room simulation, sensor helpers and physical calibration are pending. See docs/ROADMAP.md.</small></section>}
     <footer className="playback"><div><b>{source?.name ?? 'No source selected'}</b><small>All sources · operational controls are immediate</small></div><div className="row"><button aria-label="Restart playback" onClick={() => void send({ type: 'transport', playing: snapshot.transport.playing, position: 0 })}>↺</button><button className="play" onClick={() => void send({ type: 'transport', playing: !snapshot.transport.playing })}>{snapshot.transport.playing ? 'Pause' : 'Play'}</button><NumberField label="Seek (seconds)" value={snapshot.transport.position} min={0} max={86400} onChange={position => void send({ type: 'transport', playing: snapshot.transport.playing, position })}/></div><span className="hint">Playback / blackout: immediate<br/>Geometry / sources / effects: {state.mode === 'live' ? 'live' : 'staged'}</span></footer>
+    {picker && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="capture-title" className="modal capture-picker">
+      <h2 id="capture-title">{picker.replace ? 'Reconnect capture' : 'Capture a screen or window'}</h2>
+      <p>The capture joins the draft like any other source; in Preview & Apply it reaches the output only after Apply. HECTOR's own windows are not listed.</p>
+      {snapshot.platform === 'darwin' && snapshot.captureAccess !== 'granted' && <p className="warning">macOS reports Screen Recording access as “{snapshot.captureAccess}”. Allow HECTOR in System Settings › Privacy & Security › Screen Recording, then quit and reopen HECTOR. Until then previews may be blank and capture will be denied.</p>}
+      <nav className="tabs">{(['screen', 'window'] as const).map(t => <button key={t} className={pickerTab === t ? 'selected' : ''} onClick={() => setPickerTab(t)}>{t === 'screen' ? 'Screens' : 'Windows'}</button>)}</nav>
+      {choices === null ? <p className="hint">Looking for screens and windows…</p> : <div className="capture-grid">{choices.filter(c => c.kind === pickerTab).map(c =>
+        <button key={c.id} className="capture-choice" aria-label={`Capture ${c.name}`} disabled={pending} onClick={async () => { if (await send({ type: 'capture.add', sourceId: c.id, replace: picker.replace })) setPicker(null); }}>
+          {c.thumbnail ? <img src={c.thumbnail} alt=""/> : <span className="no-thumb">No preview</span>}<span>{c.name}</span>{c.outputDisplay && <small className="warning">Output display: capturing it creates a feedback loop</small>}</button>)}
+        {choices.filter(c => c.kind === pickerTab).length === 0 && <p className="hint">No {pickerTab === 'screen' ? 'screens' : 'windows'} available.</p>}</div>}
+      <div className="row"><button onClick={() => void listCaptures()}>Refresh</button><button onClick={() => setPicker(null)}>Cancel</button></div></div></div>}
     {switchDialog && <div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-labelledby="switch-title" className="modal"><h2 id="switch-title">Publish pending changes?</h2><p>Live Edit sends edits directly to the projector. Apply and save your draft, or discard it before switching.</p><div className="row"><button onClick={() => setSwitchDialog(false)}>Cancel</button><button onClick={async () => { if (await send({ type: 'mode', mode: 'live', resolution: 'discard' })) setSwitchDialog(false); }}>Discard & switch</button><button className="primary" onClick={async () => { if (await send({ type: 'mode', mode: 'live', resolution: 'apply' })) setSwitchDialog(false); }}>Apply & switch</button></div></div></div>}
   </div>;
 }
