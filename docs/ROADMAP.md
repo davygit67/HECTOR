@@ -14,13 +14,13 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Blockers
 
-- **Publishing:** pushing `feat/hector-studio` and opening the draft PR need GitHub credentials. None were available to the agent session. Until the branch is pushed, CI on Windows and macOS has never run, and the macOS build artifacts don't exist.
+- **Draft PR and first CI run:** `feat/hector-studio` is pushed, but the draft PR is not open yet and the first Windows/macOS CI run has not been inspected. The agent session has no GitHub API access (no `gh`), and the repository is private. The macOS build artifacts come from that CI run.
 - **macOS evidence:** none exists. It needs a CI run and an interactive run by a tester on macOS (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
 - **Hardware:** no projector or second display has been tested on either OS.
 
 ## Now: close out M1 (basic mapper) and capture
 
-- Push `feat/hector-studio`, open the draft PR, fix whatever the first Windows/macOS CI run reports.
+- Open the draft PR and fix whatever the first Windows/macOS CI run reports.
 - Interactive macOS run of `npm run check`, `npm run smoke` (with `HECTOR_CAPTURE_TESTS=1` after granting Screen Recording) and the manual checklist.
 - Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.
 - Install-test the unsigned NSIS installer; check the ad-hoc-signed macOS DMG opens on Apple Silicon and Intel.
