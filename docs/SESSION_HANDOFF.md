@@ -48,7 +48,7 @@ Continue building HECTOR in this repository from the existing work on branch fea
   - Preview and output decoders are not frame-locked.
 - **`hector-media` CORS is `*`.** This is acceptable because only HECTOR's own non-navigable pages can request the scheme, but revisit it if any remote content is ever loaded.
 - **Unsigned.** Signing and notarization were never performed.
-- **Commits:** see the Git section below for what was committed this session.
+- **Git:** the work is committed on `feat/hector-studio` (`3c8d2ef` implementation, `e9b4854` docs, plus this handoff fix). It has not been pushed, has no PR, and has had no human review. Pushing will trigger the first Windows/macOS CI run.
 
 ## Commands
 
