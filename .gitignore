@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-electron/
+release/
+artifacts/
+test-results/
+.local-data/
+*.log
+.env
+.env.*
+!.env.example
+*.hector.json
+*.hector-media/
+.DS_Store
