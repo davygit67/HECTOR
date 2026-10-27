@@ -14,14 +14,17 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Blockers
 
-- **Publishing:** pushing `feat/hector-studio` and opening the draft PR need GitHub credentials. None were available to the agent session. Until the branch is pushed, CI on Windows and macOS has never run.
+- **Publishing:** pushing `feat/hector-studio` and opening the draft PR need GitHub credentials. None were available to the agent session. Until the branch is pushed, CI on Windows and macOS has never run, and the macOS build artifacts don't exist.
 - **macOS evidence:** none exists. It needs a CI run and an interactive run by a tester on macOS (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
 - **Hardware:** no projector or second display has been tested on either OS.
 
-## Now: close out M1, the basic mapper
+## Now: close out M1 (basic mapper) and capture
 
-- Interactive macOS run of `npm run check`, `npm run smoke` and the manual checklist.
+- Push `feat/hector-studio`, open the draft PR, fix whatever the first Windows/macOS CI run reports.
+- Interactive macOS run of `npm run check`, `npm run smoke` (with `HECTOR_CAPTURE_TESTS=1` after granting Screen Recording) and the manual checklist.
 - Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.
+- Install-test the unsigned NSIS installer; check the ad-hoc-signed macOS DMG opens on Apple Silicon and Intel.
+- Pacing: repeat `npm run measure` fullscreen on a projector, with H.264/HEVC and 4K files, and over long runs. Explain the occasional 1/3-refresh pairs at 60 fps.
 - Human review of the draft PR.
 
 ## Next: M2, editing depth
@@ -33,7 +36,7 @@ The first release is the full parity scope, not the basic mapper.
 
 ## M3: live sources
 
-- Screen/window capture with crop and surface mapping (in progress on `feat/hector-studio`).
+- Screen/window capture: works on Windows. Remaining: macOS permission flow and interactive qualification, capture audio, behavior when the captured window is minimized, capture profiling, optional auto-reconnect after restart (currently explicit by design).
 - YouTube/live content through a sandboxed adapter that respects the service's terms.
 - Separate profiling for each source type: local media, capture, stream.
 
