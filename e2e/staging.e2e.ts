@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 import { newSurface, type Command } from '../src/core/model';
 import { colors, expectColors, fullFrame, Hector, type Point } from './harness';
 import { fixtures } from './fixtures';
+import type { MediaProbe } from '../src/core/bridge';
+
+// Playback position wraps at the end of a looping clip. Count displayed frames
+// instead; decoder identity is checked separately, and dropped frames do not count.
+const displayedFrames = (probe: MediaProbe) => probe.totalFrames! - probe.droppedFrames!;
 
 // Image sample points outside the small video surface in the top-left corner.
 const imagePoints: Point[] = [[0.4, 0.4], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
@@ -20,7 +25,7 @@ test('no draft change reaches output before Apply; Apply keeps playback continuo
     await expect.poll(async () => (await h.media(output, video.id))?.currentTime ?? 0).toBeGreaterThan(0.5);
     expectColors(await h.pixels(output, imagePoints), imageColors);
     const applied = await h.applied(), generation = (await h.media(output, video.id))!.generation;
-    let lastTime = (await h.media(output, video.id))!.currentTime!;
+    let lastFrames = displayedFrames((await h.media(output, video.id))!);
 
     const grid = { id: 'grid-source', name: 'Grid', kind: 'grid' as const, color: '#ffffff', loop: true, speed: 1, volume: 0 };
     const edits: [string, Command][] = [
@@ -39,7 +44,8 @@ test('no draft change reaches output before Apply; Apply keeps playback continuo
     ];
     for (const [label, command] of edits) {
       await h.ok({ type: 'command', command });
-      await output.waitForTimeout(250);
+      await expect.poll(async () => displayedFrames((await h.media(output, video.id))!),
+        { message: `${label}: playback advances` }).toBeGreaterThan(lastFrames);
       const state = await h.snapshot(output);
       expect(state.session.applied, `${label}: applied scene`).toEqual(applied);
       expect(state.session.unapplied, label).toBe(true);
@@ -49,8 +55,8 @@ test('no draft change reaches output before Apply; Apply keeps playback continuo
       expect(probe.paused, label).toBe(false);
       expect(probe.playbackRate, label).toBe(1);
       expect(probe.muted, label).toBe(true);
-      expect(probe.currentTime!, `${label}: clock`).toBeGreaterThan(lastTime);
-      lastTime = probe.currentTime!;
+      expect(probe.loop, label).toBe(true);
+      lastFrames = displayedFrames(probe);
     }
     // Undo/redo in Preview also stay in the draft.
     await h.ok({ type: 'undo' }); await h.ok({ type: 'undo' }); await h.ok({ type: 'redo' });
@@ -69,7 +75,8 @@ test('no draft change reaches output before Apply; Apply keeps playback continuo
     expectColors(await h.pixels(output, [[0.75, 0.75]]), [[128, 128, 128]], 45);
     const afterApply = (await h.media(output, video.id))!;
     expect(afterApply.generation).toBe(generation);
-    expect(afterApply.currentTime!).toBeGreaterThan(beforeApply.currentTime!);
+    await expect.poll(async () => displayedFrames((await h.media(output, video.id))!),
+      { message: 'Apply: playback advances' }).toBeGreaterThan(displayedFrames(beforeApply));
     expect((await h.snapshot()).session.unapplied).toBe(false);
     h.expectNoErrors();
   } finally { await h.close(); }
