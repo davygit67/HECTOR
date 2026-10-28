@@ -1,6 +1,6 @@
 # Feature parity audit
 
-Audit date: 2026-10-27. This is a release scope register, not a claim of complete parity. HECTOR is independently written; no reference code, assets, or history are imported.
+Audit date: 2026-10-27. This is a release scope register, not a claim of complete parity. HECTOR is independently written. The one exception is the ambient backlight code, adapted from adknate05 with permission (see [THIRD_PARTY.md](THIRD_PARTY.md)); no other reference code, assets, or history are imported.
 
 ## Evidence and confidence
 
@@ -30,8 +30,8 @@ There is no macOS evidence for any row yet. Next steps live in [ROADMAP.md](ROAD
 | Local image/video, play/pause/seek/loop/speed/volume | F code for files/concurrent playback; P documented | Media registry, runtime clocks | Each control works; geometry apply never restarts unchanged media | Verified (Windows) |
 | Missing media relink | U; reference implementation unverified | File grants, persistence | Missing media reported; relink repairs references | Verified (Windows) |
 | Screen/window capture and crop | U; P explicitly uses owned browser capture for normal YouTube, not desktop capture | OS permission flow, direct GPU transport | Select source, crop, stop/reconnect; qualify both OSes | Verified (Windows); macOS permission flow untested; no audio |
-| YouTube and live content | P documented normal watch-page worker and static iframe fallback | Sandboxed source adapter; service restrictions | Real playback, consent isolation, bounded transport, measured timing | Not started; control disabled |
-| Ambient/backlight, color adjustment | P documented sampled colors, smoothing, spread, room fill | GPU effects, source analysis | Actual source-derived colors; no fabricated missing-source glow | Not started; control disabled |
+| YouTube and live content | P code: watch-page worker with frame capture, ad detection and an ad-skip control (not used by HECTOR) | Sandboxed source adapter; service restrictions | Real playback, consent isolation, bounded transport, measured timing | Partial: YouTube links (including live and Shorts) verified on Windows through the official embedded player and window capture. Other live-stream services are not started. Timing not measured |
+| Ambient/backlight, color adjustment | P code (adapted with permission): sampled edge colors, letterbox detection, smoothing, tone profiles, light field, room fill | GPU effects, source analysis | Actual source-derived colors; no fabricated missing-source glow | Verified (Windows) for every source type around quad edges. Room fill, and glow that follows masks, are not started |
 | Generated visuals, notes, recipe panels, timers, target game | P documented; U expands clock/effects target | Procedural/text renderer, clock model | Controls and saved state work, no executable untrusted code | Partial: gradient, grid, elapsed clock |
 | AI-authored programs | P documented sandbox/offstage testing; no implementation inspected | Isolation, resource limits, provider | Validated and tested artifacts; rollback; no privilege escape | Not started |
 | Named setups, save/load | F code; P documented compositions | Versioned schema, atomic persistence | Reload preserves geometry and settings; invalid file rejected | Verified (Windows) |

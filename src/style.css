@@ -60,6 +60,10 @@
 .add-row:hover:not(:disabled) { background: var(--paper); }
 .add-row .glyph { color: var(--ink-3); }
 .import { margin-bottom: var(--s5); }
+.source-card > .note { grid-column: 1 / -1; }
+.link-form { display: flex; gap: 6px; margin-bottom: var(--s3); }
+.link-form input { flex: 1; }
+.link-form input[aria-invalid=true] { border-color: var(--signal); }
 
 /* Library: setups */
 .setups-form { display: flex; flex-direction: column; gap: var(--s2); margin: var(--s4) 0 var(--s5); }

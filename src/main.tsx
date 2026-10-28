@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { CaptureChoice, Request, Snapshot } from './core/bridge';
-import { newSurface, surfaceSchema, type Point, type Scene, type Source, type Surface } from './core/model';
+import { ambientDefaults, newSurface, surfaceSchema, type Ambient, type Point, type Scene, type Source, type Surface } from './core/model';
+import { parseYouTubeLink, playerKey, type PlayerStatus } from './core/youtube';
+import { BACKLIGHT_TONE_LABELS, BACKLIGHT_TONE_PROFILES } from './ambient/backlight';
 import { ProjectionRenderer, type Diagnostics } from './render/renderer';
 import { Banner, Dialog, Icon, Lamp, NumberField, Section, Segmented, SliderField, Switch, Tabs, Toggle } from './ui/kit';
 import './style.css';
 
 const isOutput = new URLSearchParams(location.search).has('output');
-const emptyDiagnostics: Diagnostics = { fps: 0, slowFrames: 0, videoDropped: 0, errors: [] };
+const emptyDiagnostics: Diagnostics = { fps: 0, slowFrames: 0, videoDropped: 0, errors: [], ambient: [] };
+const playerStates: Record<PlayerStatus['state'], string> = { loading: 'Loading', ready: 'Ready', playing: 'Playing', paused: 'Paused', buffering: 'Buffering', ended: 'Ended',
+  minimized: 'Player minimized', closed: 'Player closed', error: 'Unavailable' };
 const generators = { gradient: 'Aurora gradient', grid: 'Calibration grid', clock: 'Elapsed clock' } as const;
 const colored = (source?: Source) => source?.kind === 'gradient' || source?.kind === 'grid';
 function Viewport({ scene, snapshot, quality, onDiagnostics, onError }: { scene: Scene; snapshot: Snapshot; quality: number; onDiagnostics: (d: Diagnostics) => void; onError: (e: string) => void }) {
@@ -22,7 +26,7 @@ function Viewport({ scene, snapshot, quality, onDiagnostics, onError }: { scene:
     const element = canvas.current!; element.addEventListener('webglcontextlost', lost);
     return () => { element.removeEventListener('webglcontextlost', lost); renderer.current?.dispose(); renderer.current = null; delete window.hectorProbe; };
   }, [onDiagnostics, onError]);
-  useEffect(() => { renderer.current?.update(scene, snapshot.assets, snapshot.captures, snapshot.transport, isOutput && snapshot.output.blackout); }, [scene, snapshot]);
+  useEffect(() => { renderer.current?.update(scene, snapshot.assets, snapshot.captures, snapshot.transport, isOutput && snapshot.output.blackout, snapshot.players); }, [scene, snapshot]);
   useEffect(() => { renderer.current?.setQuality(quality); }, [quality]);
   return <canvas ref={canvas} className="projection" aria-label={isOutput ? 'Projection output' : 'Draft preview'} />;
 }
@@ -31,7 +35,29 @@ function Thumb({ source, live }: { source: Source; live: boolean }) {
   const style = source.kind === 'gradient' ? { background: `linear-gradient(135deg, ${source.color}, #0ab8ad)` }
     : source.kind === 'grid' ? { background: `linear-gradient(${source.color} 1px, transparent 1px) 0 0 / 4.5px 4.67px, linear-gradient(90deg, ${source.color} 1px, transparent 1px) 0 0 / 4.5px 4.67px, #090909` } : undefined;
   return <div className={`thumb ${source.kind}`} style={style} aria-hidden="true">
-    {source.kind === 'video' ? <Icon name="play"/> : source.kind === 'image' ? <Icon name="frame"/> : source.kind === 'clock' ? '00:00' : source.kind === 'capture' ? <Lamp tone={live ? 'signal' : undefined}>LIVE</Lamp> : null}</div>;
+    {source.kind === 'video' ? <Icon name="play"/> : source.kind === 'image' ? <Icon name="frame"/> : source.kind === 'clock' ? '00:00' : source.kind === 'capture' ? <Lamp tone={live ? 'signal' : undefined}>LIVE</Lamp> : source.kind === 'youtube' ? <Lamp tone={live ? 'signal' : undefined}>YOUTUBE</Lamp> : null}</div>;
+}
+const youtubeProblem = (status?: PlayerStatus) => status?.state === 'error' ? status.error : status?.state === 'minimized' ? 'Restore the player window: a minimized window cannot be captured, so surfaces keep its last frame.' : status?.state === 'closed' ? 'The player window was closed. Reopen it to keep projecting this video.' : '';
+function YouTubeAction({ status, onShow, onReload }: { status?: PlayerStatus; onShow: () => void; onReload: () => void }) {
+  return status?.state === 'error' || status?.state === 'closed' ? <button onClick={onReload}>{status.state === 'closed' ? 'Reopen player' : 'Reload player'}</button> : <button disabled={!status} onClick={onShow}>Show player window</button>;
+}
+/** Ambient backlight: colours come only from the source's own frames, sampled by each renderer. */
+function AmbientControls({ ambient, surface, source, liveView, probe, onChange }: { ambient: Ambient; surface: Surface; source?: Source; liveView: boolean; probe?: Diagnostics['ambient'][number]; onChange: (ambient: Ambient) => void }) {
+  const set = (patch: Partial<Ambient>) => onChange({ ...ambient, ...patch });
+  const state = !ambient.enabled ? 'Off. When on, the wall around this surface glows with the colours at its source’s edges.'
+    : !source ? 'Assign a source: the glow takes its colours from the source’s own frames.'
+    : !liveView ? 'Live view is off, so the studio preview is not sampling. The projected output samples and glows on its own.'
+    : !probe?.samples ? 'Waiting for frames from the source. No glow is shown until real frames arrive.'
+    : probe.dark ? 'The source’s edges are dark, so the glow is dark too.'
+    : `Sampling the source’s edges about 15 times a second (analysis ${probe.analysisMs.toFixed(1)} ms).`;
+  return <Section title="Ambient backlight"><Toggle label="Ambient backlight" checked={ambient.enabled} onChange={enabled => set({ enabled })}/>
+    {ambient.enabled && <><label className="field"><span>Lighting style</span><select aria-label="Lighting style" value={ambient.toneProfile} onChange={e => set({ toneProfile: e.target.value as Ambient['toneProfile'] })}>{BACKLIGHT_TONE_PROFILES.map(p => <option key={p} value={p}>{BACKLIGHT_TONE_LABELS[p]}</option>)}</select></label>
+      <SliderField label="Glow intensity" value={ambient.intensity} min={0} max={2} step={.05} scale={100} unit="%" onChange={intensity => set({ intensity })}/>
+      <SliderField label="Glow spread" value={ambient.spread} min={.02} max={.4} step={.01} scale={100} unit="%" onChange={spread => set({ spread })}/>
+      <SliderField label="Glow opacity" value={ambient.opacity} min={0} max={1} step={.05} scale={100} unit="%" onChange={opacity => set({ opacity })}/>
+      <SliderField label="Vibrance" value={ambient.vibrance} min={0} max={2} step={.05} scale={100} unit="%" onChange={vibrance => set({ vibrance })}/>
+      <SliderField label="Smoothing" value={ambient.smoothingMs} min={0} max={1000} step={10} unit="ms" onChange={n => set({ smoothingMs: Math.round(n) })}/></>}
+    <p className="note">{state}{ambient.enabled && surface.mask === 'ellipse' ? ' The glow follows the quad’s edges, not the ellipse mask.' : ''}{ambient.enabled ? ' It is a staged effect: in Preview mode it reaches the projector on Apply.' : ''}</p></Section>;
 }
 function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [error, setError] = useState('');
@@ -43,6 +69,7 @@ function App() {
   const [dragCorners, setDragCorners] = useState<Surface['corners'] | null>(null), [corner, setCorner] = useState(0), [pending, setPending] = useState(false);
   const gesture = useRef<{ surface: Surface; index: number; start: Point; corners: Surface['corners'] } | null>(null);
   const svg = useRef<SVGSVGElement>(null), reported = useRef('');
+  const [youtubeLink, setYoutubeLink] = useState(''), [youtubeError, setYoutubeError] = useState('');
   const [setupName, setSetupName] = useState(''), [picker, setPicker] = useState<{ replace?: string } | null>(null);
   const [choices, setChoices] = useState<CaptureChoice[] | null>(null), [pickerTab, setPickerTab] = useState<'screen' | 'window'>('screen');
   const onError = useCallback((message: string) => setError(message), []);
@@ -135,13 +162,20 @@ function App() {
         {tab === 'Media' && <div className="panel-body"><button className="wide import" onClick={() => void send({ type: 'import' })}><Icon name="plus"/>Import images / videos</button>
           <Section title="Sources" count={scene.sources.length}><div className="source-list">{scene.sources.map(s => {
             const live = !!s.captureId && !!snapshot.captures[s.captureId], missing = !!s.assetId && !!snapshot.assets[s.assetId]?.missing, inUse = surface?.sourceId === s.id;
-            return <div className={inUse ? 'card source-card selected' : 'card source-card'} key={s.id}><Thumb source={s} live={live}/>
-              <div className="source-meta"><b title={s.name}>{s.name}</b>{missing ? <Lamp tone="signal">Missing file</Lamp> : <span className="label">{s.kind === 'capture' ? live ? `Live ${snapshot.captures[s.captureId!].kind} capture` : 'Capture · not connected' : s.kind}</span>}</div>
-              <div className="source-actions"><button disabled={!surface || surface.locked || inUse} onClick={() => update({ sourceId: s.id })}>{inUse ? 'On this surface' : 'Use on surface'}</button>{s.assetId && <button onClick={() => void send({ type: 'relink', assetId: s.assetId! })}>{missing ? 'Missing · Relink' : 'Relink file'}</button>}{s.kind === 'capture' && <button onClick={() => openPicker(s.id)}>{live ? 'Change capture source' : 'Choose capture source'}</button>}<button className="danger" aria-label={`Remove ${s.name}`} onClick={() => void send({ type: 'command', command: { type: 'source.remove', id: s.id } })}>Remove</button></div></div>;
+            const player = s.kind === 'youtube' ? snapshot.players[playerKey(s)] : undefined, problem = youtubeProblem(player), name = player?.title || s.name;
+            return <div className={inUse ? 'card source-card selected' : 'card source-card'} key={s.id}><Thumb source={s} live={live || player?.state === 'playing'}/>
+              <div className="source-meta"><b title={name}>{name}</b>{missing ? <Lamp tone="signal">Missing file</Lamp> : s.kind === 'youtube' ? <Lamp tone={problem ? 'signal' : player?.state === 'playing' ? 'ok' : undefined}>YouTube · {playerStates[player?.state ?? 'loading']}</Lamp> : <span className="label">{s.kind === 'capture' ? live ? `Live ${snapshot.captures[s.captureId!].kind} capture` : 'Capture · not connected' : s.kind}</span>}</div>
+              {problem && <p className="note warning">{problem}</p>}
+              <div className="source-actions"><button disabled={!surface || surface.locked || inUse} onClick={() => update({ sourceId: s.id })}>{inUse ? 'On this surface' : 'Use on surface'}</button>{s.assetId && <button onClick={() => void send({ type: 'relink', assetId: s.assetId! })}>{missing ? 'Missing · Relink' : 'Relink file'}</button>}{s.kind === 'capture' && <button onClick={() => openPicker(s.id)}>{live ? 'Change capture source' : 'Choose capture source'}</button>}{s.kind === 'youtube' && <YouTubeAction status={player} onShow={() => void send({ type: 'youtube.show', sourceId: s.id })} onReload={() => void send({ type: 'youtube.reload', sourceId: s.id })}/>}<button className="danger" aria-label={`Remove ${s.name}`} onClick={() => void send({ type: 'command', command: { type: 'source.remove', id: s.id } })}>Remove</button></div></div>;
           })}</div></Section>
           <Section title="Generators"><div className="add-list">{(Object.keys(generators) as (keyof typeof generators)[]).map(kind => <button className="add-row" key={kind} aria-label={`Add ${generators[kind]}`} onClick={() => createSource(kind)}>{generators[kind]}<Icon name="plus"/></button>)}</div></Section>
           <Section title="Live sources"><div className="add-list"><button className="add-row" aria-label="Add Screen / window capture" onClick={() => openPicker()}>Screen / window capture<Icon name="plus"/></button></div><p className="note">Video only, no audio. Captures do not resume automatically after a restart; reconnect them here.{snapshot.platform === 'darwin' && snapshot.captureAccess !== 'granted' ? ' macOS needs Screen Recording permission (System Settings › Privacy & Security).' : ''}</p></Section>
-          <Section title="Planned sources"><div className="add-list"><button className="add-row" disabled>YouTube / live stream<span className="tag">Pending</span></button></div><p className="note">Sandboxed service playback adapter pending. No URL is downloaded or played.</p></Section></div>}
+          <Section title="YouTube"><form className="link-form" onSubmit={async event => {
+            event.preventDefault(); const link = parseYouTubeLink(youtubeLink);
+            if (!link.ok) { setYoutubeError(link.error); return; }
+            setYoutubeError(''); if (await send({ type: 'youtube.add', link: youtubeLink })) setYoutubeLink('');
+          }}><input aria-label="YouTube link" placeholder="youtube.com/watch?v=… or youtu.be/…" value={youtubeLink} aria-invalid={!!youtubeError} aria-describedby="youtube-feedback" onChange={e => { setYoutubeLink(e.target.value); setYoutubeError(''); }}/><button type="submit" disabled={pending}>Add video</button></form>
+            <p id="youtube-feedback" className={youtubeError ? 'note warning' : 'note'} aria-live="polite">{youtubeError || 'Plays in YouTube’s official embedded player, in its own window; HECTOR mirrors that window onto surfaces like a window capture. Keep it open and not minimized. Videos whose owners disable embedding, and private or restricted videos, cannot play. Nothing is downloaded. Other live-stream services are not supported yet.'}</p></Section></div>}
         {tab === 'Setups' && <div className="panel-body"><p className="note">Named snapshots of the draft. Recall follows the current editing mode.</p>
           <div className="setups-form"><label className="field stacked"><span className="label">Setup name</span><input aria-label="Setup name" value={setupName} placeholder={scene.name} maxLength={80} onChange={e => setSetupName(e.target.value)}/></label><button className="wide" onClick={async () => { if (await send({ type: 'setup.save', name: setupName.trim() || scene.name })) setSetupName(''); }}>Save named setup</button></div>
           <Section title="Saved setups" count={snapshot.setups.length}>{snapshot.setups.length > 0 ? <div className="add-list">{snapshot.setups.map(name => <button className="add-row" key={name} onClick={() => void send({ type: 'setup.load', name })}><span>{name}</span><span className="label">Recall</span></button>)}</div> : <p className="note">No named setups yet.</p>}</Section>
@@ -177,9 +211,9 @@ function App() {
             <div className="crop-fields">{['Left','Top','Right','Bottom'].map((label,i) => <NumberField key={label} label={label} value={surface.crop[i]*100} min={0} max={95} onChange={n => { const crop = [...surface.crop] as Surface['crop']; crop[i] = n/100; update({ crop }); }}/>)}</div><p className="note">Trim the source before warping.</p></Section>}
           {inspector === 'Effects' && <><Section title="Image"><SliderField label="Opacity" value={surface.opacity} min={0} max={1} step={.05} scale={100} unit="%" onChange={opacity => update({ opacity })}/><SliderField label="Brightness" value={surface.brightness} min={0} max={2} step={.05} scale={100} unit="%" onChange={brightness => update({ brightness })}/><SliderField label="Saturation" value={surface.saturation} min={0} max={2} step={.05} scale={100} unit="%" onChange={saturation => update({ saturation })}/>
               <div className="field"><span>Mask</span><Segmented small label="Mask" value={surface.mask} options={[{ value: 'none', label: 'None' }, { value: 'ellipse', label: 'Ellipse' }]} onChange={mask => update({ mask })}/></div>{colored(source) && <label className="field"><span>Generator color</span><input type="color" value={source!.color} onChange={e => sourceUpdate({ color: e.target.value })}/></label>}<p className="note">Effects and crop are scene edits. They publish only on Apply in Preview mode.</p></Section>
-            <Section title="Planned"><button className="wide" disabled>Ambient backlight</button><p className="note">Source-color sampling and spatial light compositing are planned.</p></Section></>}
+            <AmbientControls ambient={surface.ambient ?? ambientDefaults} surface={surface} source={source} liveView={liveView} probe={diagnostics.ambient.find(a => a.surfaceId === surface.id)} onChange={ambient => update({ ambient })}/></>}
         </fieldset>
-        <Section title="Source settings · staged">{source?.kind === 'capture' ? <p className="note">Live capture is always running: play/pause, seek, loop, speed and volume do not apply, and no audio is captured. Crop, effects, masks and layering work as for any source.</p> : source ? <><SliderField label="Playback speed" value={source.speed} min={.1} max={4} step={.1} unit="×" onChange={speed => sourceUpdate({ speed })}/><SliderField label="Output volume" value={source.volume} min={0} max={1} step={.05} scale={100} unit="%" onChange={volume => sourceUpdate({ volume })}/><Toggle label="Loop media" checked={source.loop} onChange={loop => sourceUpdate({ loop })}/><p className="note">Studio preview is always muted. Output starts muted until volume is changed and applied.</p></> : <p className="note">Assign a source from the Media library.</p>}</Section></div>
+        <Section title="Source settings · staged">{source?.kind === 'capture' ? <p className="note">Live capture is always running: play/pause, seek, loop, speed and volume do not apply, and no audio is captured. Crop, effects, masks and layering work as for any source.</p> : source ? <><SliderField label="Playback speed" value={source.speed} min={.1} max={4} step={.1} unit="×" onChange={speed => sourceUpdate({ speed })}/><SliderField label="Output volume" value={source.volume} min={0} max={1} step={.05} scale={100} unit="%" onChange={volume => sourceUpdate({ volume })}/><Toggle label="Loop media" checked={source.loop} onChange={loop => sourceUpdate({ loop })}/><p className="note">{source.kind === 'youtube' ? 'YouTube offers 0.25×–2× and uses the nearest speed. Play, pause, restart and seek follow the transport, but YouTube is not frame-locked to local media. Sound comes from the player window: it follows the applied volume while the output is open, and stays muted otherwise.' : 'Studio preview is always muted. Output starts muted until volume is changed and applied.'}</p></> : <p className="note">Assign a source from the Media library.</p>}</Section></div>
         : <div className="panel-body"><p className="note">Select a surface on the canvas or in Layers.</p></div>}
       </aside>}
     </div>

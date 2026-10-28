@@ -18,11 +18,17 @@ This document records what has been verified, on which platform and how. Windows
 | Editing (`editing.e2e.ts`) | Mouse corner drag, surface drag, Alt fine drag, convexity guard, lock, rapid arrow-key nudges, rotate/scale; undo/redo via buttons and shortcuts in Preview and Live | Pass | Not run |
 | Projects (`projects.e2e.ts`) | Named setups (validation, Preview vs Live recall, fresh asset grants); portable export, move, reopen, play; export rollback; save/apply failures keep output and draft | Pass | Not run |
 | Lifecycle (`lifecycle.e2e.ts`) | Secure preferences; content-only output with hidden cursor; output cannot mutate or arm captures; UI activity never recreates output; fullscreen survives Studio focus; windowed toggle; close/reopen; restart restore | Pass (single display) | Not run |
+| Ambient (`ambient.e2e.ts`) | Glow outside each edge takes that edge's source colour (real screenshots) and never covers the picture; staged until Apply; output keeps its glow with Studio Live view off; no glow without frames; undo/redo; generators; follows moved surfaces; settings persist across restart; analysis in a worker with async readback | Pass | Not run |
+| YouTube (`youtube.e2e.ts`) | Link validation in Studio and main; player isolation (no bridge, sandbox, navigation locked, excluded from the picker); network-outage error with recovery; draft-only player closed on discard. **Online** (`HECTOR_YOUTUBE_TESTS=1`): real playback mirrored onto a surface; output only after Apply; ambient light from the video; Live view independence; transport pause/play; YouTube's error for an unknown video | Pass (online part run on 2026-10-28) | Not run |
 | Capture (`capture.e2e.ts`) | Picker lists windows and screens (HECTOR's own excluded); staged until Apply; projected and cropped pixels; draft removal keeps output's capture live; window closure reported to the Studio and output goes black; reconnect via picker | Pass | Skipped without `HECTOR_CAPTURE_TESTS=1` (needs Screen Recording permission) |
 
 Windows environment (2026-10-27): Windows 11 Home 10.0.26200, Node 24.14.0, Electron 45.0.0, one built-in 120 Hz display at 1646×1029 logical. No projector or second display. Result: 18 unit tests and 15 end-to-end tests pass.
 
 Studio redesign (`feat/rams-design-system`, 2026-10-28), same Windows machine: 18 unit tests and 16 end-to-end tests pass, capture included. Every studio screen and dialog was screenshotted at 1440×900 and at the 1024×650 minimum and reviewed by eye. macOS rendering (Helvetica Neue fallback, native select and range styling) has not been checked.
+
+YouTube and ambient branch (`feat/youtube-ambient`, 2026-10-28), same Windows machine: 86 unit tests and 20 end-to-end tests pass, including capture and the online YouTube test. Without `HECTOR_YOUTUBE_TESTS=1`, the online YouTube test is skipped and everything else runs offline.
+
+**Ambient cost** (Windows, same machine, output windowed on the built-in 120 Hz panel, local 1280×720 30 fps clip on a 60%-width surface, 10 s per condition, one run each). Output render-loop intervals were the same with ambient off and on: 1202 frames, p50 8.3 ms, p99 8.8 ms, no intervals over 25 ms, no dropped video frames. In the worker, analysis took about 7.5 ms and the light field about 12 ms per sample, at about 15 samples per second. An earlier build that ran this work on the render thread raised p99 to 16.6 ms, with 4 intervals over 25 ms; that is why the worker exists. This is not a qualification on a projector, a fullscreen output, a slower GPU, or with several lit surfaces.
 
 CI (`.github/workflows/ci.yml`) runs check, smoke and unsigned `dist` on `windows-latest` and `macos-latest` and uploads the installers. **It has never run**, because the branch has not been pushed yet. A green CI run would show the suites work on hosted runners; it would not qualify projectors, real displays or interactive macOS behavior.
 
@@ -71,7 +77,8 @@ For a tester with a Mac. Allow about 30 minutes.
    npm run smoke            # drives real windows; capture test is skipped
    npm start                # launch HECTOR
    ```
-3. Screen capture: open *Media → Screen / window capture*. macOS asks for Screen Recording permission, for "Electron" when started with `npm start`. Allow it in *System Settings → Privacy & Security → Screen Recording*, quit HECTOR, then run `HECTOR_CAPTURE_TESTS=1 npm run smoke` and try capture by hand.
+3. YouTube: paste a link under *Media → YouTube*. Mirroring the player window uses screen capture, so the same Screen Recording permission applies. To run the online test: `HECTOR_YOUTUBE_TESTS=1 npm run smoke`.
+4. Screen capture: open *Media → Screen / window capture*. macOS asks for Screen Recording permission, for "Electron" when started with `npm start`. Allow it in *System Settings → Privacy & Security → Screen Recording*, quit HECTOR, then run `HECTOR_CAPTURE_TESTS=1 npm run smoke` and try capture by hand.
 
 **Option B: unsigned build from CI.** Download the `hector-macOS-unsigned` artifact from the GitHub Actions run. Use `-arm64` for Apple Silicon and `-x64` for Intel. The app is only ad-hoc signed and not notarized, so Gatekeeper blocks it:
 - Open the DMG and drag HECTOR to Applications.
@@ -91,4 +98,6 @@ Use a real projector or second display in **extended desktop** mode, not mirrore
 - [ ] **Disconnect and reconnect:** unplug the projector during playback. Output hides and blacks out, nothing appears on the laptop, and the Studio shows the disconnect. Replug, reselect the display, open output, then *Restore output*.
 - [ ] **Sleep and wake:** sleep the laptop with output fullscreen, then wake it. Does output return to the projector? Is playback still running? Is blackout or the disconnect notice shown when needed?
 - [ ] **Capture on hardware:** capture a window and a screen, then project and crop them. Close the captured window and confirm the Studio reports it. Never capture the projector's own screen (that creates a feedback loop).
+- [ ] **YouTube on hardware:** project a YouTube video fullscreen while editing. Check that the player window can sit behind the Studio or on another display without freezing the projection, and note audio sync against the projected image.
+- [ ] **Ambient on hardware:** turn the backlight on for a video surface on the projector. Judge flicker and lag by eye, and check render pacing with several lit surfaces.
 - [ ] **Long run:** at least 1 hour with 1080p and 4K H.264 and VP9 files. Watch memory in Task Manager or Activity Monitor and note any visible stutter.
