@@ -1,5 +1,13 @@
 # Agent task status
 
+## Cloud projection inbox — October 27, implemented, integration verification in progress
+
+User requests MCP delivery of cloud task updates and creative prompts to the existing canvas agent. Clean guarded synchronization returned up-to-date before edits. Agent owns an authenticated MCP relay, durable bounded job inbox, outbound local delivery worker, tests and setup documentation under agent/. Canvas task has been asked to own host/UI integration through an agreed adapter, preserving the existing scene and serializing manual/cloud requests. Provider/account connection is pending user clarification; no public endpoint, schedule, credentials exposure or live scene test is authorized by a test fixture. Defer synchronization while these edits are in progress; each owner stages only its completed files.
+
+Delivered five external MCP tools with the official pinned SDK1.32.2, HTTP bearer roles and a stdio proxy, strict bounded schemas, exact target, origin/Host protection, HTTPS-only remote receiver URLs and separate sender/device credentials. A private atomic file inbox retains up to1,000jobs with stable request-ID deduplication, delivery TTL and pre-execution cancellation. A local receipt journal records intent before execution and retries acknowledgements without replaying edits; lost start response/interrupted work becomes uncertain. No scene store, per-frame AI or idle polling model call is added. Runtime exports and types are agreed in agent/src/index.ts and relay/types.ts. Setup limitations (single process/installation, persistent disk, manual stale-lock recovery, OAuth adapter if required by provider) are documented in agent/CLOUD_PROJECTION.md.
+
+Validation:172agent tests/typecheck/build pass, including15isolated relay checks, actual MCP HTTP and stdio clients, existing agent/canonical timer creation with scripted model, auth/scope/target failures, duplicate/expiry/restart handling, cancellation races and lost start/completion responses. No paid model call or live scene edit. Production npm audit is clean after updating the newly added transitive undici; existing low dev-only esbuild advisory concerns its unused development server and was not changed. Canvas reports host/native typecheck passing and is finishing lifecycle/UI/integrated fixture verification. Agent source is stable for that integration. Publication awaits owner staging coordination, then each slice is committed explicitly and pushed together when both are verified.
+
 Owner: **Define projection content layer** (`01a13305-d81f-7c63-b810-5326284f56ac`).
 
 ## Published — agent-guided object mapping refinement, October 18

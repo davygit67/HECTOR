@@ -30,6 +30,8 @@ The model is configurable. These limits bound individual requests, not total acc
 
 ## What the agent can do
 
+Cloud tasks can now submit task updates or creative prompts through the optional **MCP projection inbox**. A selected local Studio receives queued jobs and runs them through this same agent. Idle polling uses no model calls. Connection/deployment setup is separate; see [Cloud projection setup](CLOUD_PROJECTION.md) for tools, credentials, receipt semantics and provider limitations.
+
 The full Studio integration exposes 38 tools. A basic snapshot/dispatch adapter exposes scene tools but omits host-dependent operations, including program authoring. Existing `.env` values override defaults; update the step/time settings locally if they still use the earlier 6-step/45-second defaults. Offline program tests also use the canvas-owned QuickJS dependencies, so install the root package as described in the project setup first.
 
 | Tools | Purpose |

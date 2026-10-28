@@ -1,5 +1,13 @@
 # Projection Mapper: agent, content, and canvas architecture
 
+## Cloud projection inbox — October 27, 2026
+
+An optional MCP relay accepts task-update data or natural-language visual requests from an authorized cloud client. It owns a bounded durable job queue, not a copy of the room or an additional projection agent. A local outbound receiver binds to one explicitly chosen Studio and sends work through the existing chat controller and room lock. Manual and cloud work share the same current canvas, completion review and supported capabilities. Idle polling does not invoke a model.
+
+The relay exposes five MCP tools: publish_task_update, request_projection, get_projection_request, get_projector_status and cancel_projection_request. Separate submit/device credentials protect Streamable HTTP and a local stdio proxy; HTTPS is required for remote receiver connections. Stable event IDs deduplicate retries, delivery deadlines expire stale updates, and a private local receipt journal retries acknowledgements without replaying scene edits. Interrupted executions become uncertain and require inspection rather than automatic resubmission. Queue acceptance, agent completion and physically verified projection remain distinct; cloud receipts always report projectionVerified:false.
+
+This implementation is single-installation/single-process with persistent disk, bounded retention and explicit local receiver opt-in. Provider account connection and public hosting remain setup work; OAuth-only clients need a gateway/adapter. MCP does not itself add new image/video generation, scheduling or hardware capability. See [cloud connection setup and limits](agent/CLOUD_PROJECTION.md).
+
 ## Implemented agent layer — October 18, 2026
 
 The shared canvas remains authoritative. The agent has typed tools for implemented scene controls (layout, layers, media presentation, display, selection and explicit alignment/geometry edits), plus a host-owned Studio port for navigation, playback/output, imports, saved compositions and sensor controls. File/account/browser-permission steps report a user handoff. Retired effects and direct game-score injection remain unavailable. Measured fixed-rig solving, explicit selected-object controls and bounded generated 2D programs have separate contracts; body/touch tracking, automatic object recognition and unimplemented services are not implied by interface parity.

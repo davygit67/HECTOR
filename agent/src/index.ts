@@ -7,3 +7,6 @@ export { createOpenAIYouTubeSearch, type YouTubeSearch, type YouTubeSearchResult
 
 export { createMemoryStore, type MemoryStore, type MemoryEntry, type AdjustmentEvent } from './memory.js';
 export { EXPERIENCES } from './experiences.js';
+export { createProjectionRelayWorker } from './relay/worker.js';
+export { readProjectionRelayConfig } from './relay/types.js';
+export type { ProjectionDelivery, ProjectionDeliveryReceipt, ProjectionRelayStatus, ProjectionRelayWorkerOptions, ProjectionRelayWorker } from './relay/types.js';

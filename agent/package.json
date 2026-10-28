@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Projection Mapper AI orchestration and canvas tool adapters.",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "exports": {
-    ".": { "types": "./src/index.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -14,10 +19,13 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run build && npm test",
     "doctor": "node --env-file-if-exists=.env --import tsx src/doctor.ts",
-    "smoke": "node --env-file-if-exists=.env --import tsx src/smoke.ts"
+    "smoke": "node --env-file-if-exists=.env --import tsx src/smoke.ts",
+    "relay": "node --env-file-if-exists=.env --import tsx src/relay/cli.ts",
+    "mcp": "node --env-file-if-exists=.env --import tsx src/relay/stdio.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "4.0.92",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "ai": "7.0.138",
     "zod": "4.6.7"
   },
