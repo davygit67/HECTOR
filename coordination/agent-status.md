@@ -1,5 +1,11 @@
 # Agent task status
 
+## HECTOR publication — October 28, in progress
+
+User authorizes pushing the full latest project to a new davygit67/HECTOR branch. Checked current owners idle and clean worktree; guarded origin synchronization is up-to-date. GitHub connector returns404 but existing signed-in CLI verifies private repository and push access. Added hector remote, fetched its two existing branches and confirmed no common ancestor with local main. Target codex/nate-projection-mapper is new. Do not switch the shared checkout, modify HECTOR main or merge histories. Existing tracked source/history includes all released advanced features; no untracked nonignored source exists. Full outgoing-history guard passed668 unique versions with no findings.
+
+Added agent/HECTOR_HANDOFF.md with Windows branch setup, feature inventory, private-data exclusions, current sync policy and a staged future integration approach. Root COLLABORATING.md still contains an obsolete recurring-heartbeat description; this handoff/index explicitly supersede it without editing the canvas owner's file. Completed root typecheck, agent/helper builds,244app tests,173agent tests and21helper tests; two optional C# fixtures skip. Initial restricted runs blocked temporary localhost listeners (EPERM); the networking-enabled reruns pass without code changes. Only these owned docs/status paths will be staged. Preserve all local API/tunnel keys and runtime data. Publication hold ends after remote verification.
+
 ## Cloud delivery verification — October 28
 
 User explicitly authorized a temporary ChatGPT test chat. Opened the existing plugin's Try in chat and selected Temporary chat. A real get_projector_status call correctly found receiver offline and did not submit. Local service checks confirmed the official managed tunnel process_running/healthy/ready alltrue and Studio HTTP200. The retained Studio tab had a stale connection; used its Reconnect button, then Receive here, preserving Scene4193/Geometry6.
