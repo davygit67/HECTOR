@@ -28,7 +28,7 @@ async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeo
   try {
     await expect.poll(async () => {
       pixels = await h.pixels(page, points);
-      return pixels.some(c => !dark(c));
+      return pixels.some(c => c.some(v => v > 12));
     }, { timeout }).toBe(true);
   } catch (cause) {
     const probe = await page.evaluate(() => {

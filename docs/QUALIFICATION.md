@@ -8,7 +8,7 @@ This document records what has been verified, on which platform and how. Windows
 - `npm run smoke`: Playwright drives the built app in real Electron windows.
   - Media fixtures are generated at run time: constant-frame-rate VP8 WebM via WebCodecs, and PNGs.
   - Native file dialogs are stubbed in main. Everything else is real: IPC, decoding, GPU compositing, OS capture.
-  - Pixels are sampled from screenshots of the projection canvas.
+  - Pixels are sampled from Electron's native composited screenshots, clipped to the measured projection canvas. This avoids Playwright's automatic scroll/stability wait, which stalled on animated output on the Windows runner while the renderer and ambient worker continued producing frames.
 
 | Area (spec) | What is exercised | Windows 11 | macOS |
 |---|---|---|---|
@@ -30,7 +30,9 @@ YouTube and ambient branch (`feat/youtube-ambient`, 2026-10-28), same Windows ma
 
 **Ambient cost** (Windows, same machine, output windowed on the built-in 120 Hz panel, local 1280×720 30 fps clip on a 60%-width surface, 10 s per condition, one run each). Output render-loop intervals were the same with ambient off and on: 1202 frames, p50 8.3 ms, p99 8.8 ms, no intervals over 25 ms, no dropped video frames. In the worker, analysis took about 7.5 ms and the light field about 12 ms per sample, at about 15 samples per second. An earlier build that ran this work on the render thread raised p99 to 16.6 ms, with 4 intervals over 25 ms; that is why the worker exists. This is not a qualification on a projector, a fullscreen output, a slower GPU, or with several lit surfaces.
 
-CI (`.github/workflows/ci.yml`) runs check, smoke and unsigned `dist` on `windows-latest` and `macos-latest` and uploads the installers. **It has never run**, because the branch has not been pushed yet. A green CI run would show the suites work on hosted runners; it would not qualify projectors, real displays or interactive macOS behavior.
+CI (`.github/workflows/ci.yml`) runs check, smoke and unsigned `dist` on `windows-latest` and `macos-latest` and uploads the installers. The [first combined-branch PR run](https://github.com/davygit67/HECTOR/actions/runs/40773803298) was inspected on 2026-10-28: both platforms passed 86 unit tests, typecheck and build; macOS passed 18 smoke tests (capture and online YouTube skipped) and produced unsigned artifacts. Windows passed 18 smoke tests, skipped online YouTube and timed out in the generator-glow pixel assertion. Follow-up diagnostics showed that pixel capture was stuck in `scrollIntoViewIfNeeded`, with no pixels returned, no renderer errors, and active ambient sampling. The harness now measures the canvas directly and captures through Electron. Check the latest [PR #4 checks](https://github.com/davygit67/HECTOR/pull/4/checks) for rerun results. CI does not qualify projectors, real displays or interactive macOS behavior.
+
+Cloud Linux validation of the capture-harness change (2026-10-28): `npm run check` passed all 86 tests, typecheck and build. `npm run smoke` could not launch Electron because this environment denies the process-singleton socket; desktop validation uses the Windows/macOS runners.
 
 ## Local video pacing (`npm run measure`)
 
@@ -101,3 +103,4 @@ Use a real projector or second display in **extended desktop** mode, not mirrore
 - [ ] **YouTube on hardware:** project a YouTube video fullscreen while editing. Check that the player window can sit behind the Studio or on another display without freezing the projection, and note audio sync against the projected image.
 - [ ] **Ambient on hardware:** turn the backlight on for a video surface on the projector. Judge flicker and lag by eye, and check render pacing with several lit surfaces.
 - [ ] **Long run:** at least 1 hour with 1080p and 4K H.264 and VP9 files. Watch memory in Task Manager or Activity Monitor and note any visible stutter.
+

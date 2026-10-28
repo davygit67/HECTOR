@@ -14,8 +14,8 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Blockers
 
-- **Draft PR and first CI run:** `feat/hector-studio` is pushed, but the draft PR is not open yet and the first Windows/macOS CI run has not been inspected. The agent session has no GitHub API access (no `gh`), and the repository is private. The macOS build artifacts come from that CI run.
-- **macOS evidence:** none exists. It needs a CI run and an interactive run by a tester on macOS (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
+- **PR review and CI:** review [PR #4](https://github.com/davygit67/HECTOR/pull/4) and confirm its latest Windows/macOS checks before merging. The first combined-branch run was inspected; macOS artifacts are available. See [QUALIFICATION.md](QUALIFICATION.md) for the Windows screenshot-wait diagnosis and the capture-harness change.
+- **macOS interactive evidence:** CI evidence exists, but an interactive run by a tester on macOS is still needed (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
 - **Hardware:** no projector or second display has been tested on either OS.
 
 ## Now: close out M1 (basic mapper) and capture
@@ -30,7 +30,7 @@ The first release is the full parity scope, not the basic mapper.
 - Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.
 - Install-test the unsigned NSIS installer; check the ad-hoc-signed macOS DMG opens on Apple Silicon and Intel.
 - Pacing: repeat `npm run measure` fullscreen on a projector, with H.264/HEVC and 4K files, and over long runs. Explain the occasional 1/3-refresh pairs at 60 fps.
-- Human review of the draft PR.
+- Human review of PR #4.
 
 ## Next: M2, editing depth
 
@@ -69,3 +69,4 @@ The first release is the full parity scope, not the basic mapper.
 ## Scope decision awaiting confirmation
 
 - **Show sequencing / live cue slots** (FREEkMapper has sequences): the user deprioritized it. It stays in scope on paper but is not scheduled until the user confirms whether it belongs in the first release.
+

@@ -88,14 +88,17 @@ export class Hector {
   /** Average RGB around normalized points of a window's projection canvas, from a real screenshot. */
   async pixels(page: Page, points: Point[]): Promise<Rgb[]> {
     const canvas = page.locator('canvas.projection');
-    this.pixelCaptureStage = 'scroll';
-    await canvas.scrollIntoViewIfNeeded();
     this.pixelCaptureStage = 'bounds';
-    const bounds = await canvas.boundingBox();
-    if (!bounds) throw new Error('Projection canvas is not visible.');
+    // Playwright's scrollIntoViewIfNeeded (also used by locator.screenshot) can wait indefinitely
+    // on the Windows runner's animated canvas. Scroll synchronously and measure the real canvas instead.
+    const bounds = await canvas.evaluate(element => {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+    if (!bounds.width || !bounds.height) throw new Error('Projection canvas is not visible.');
     const rect = { x: Math.floor(bounds.x), y: Math.floor(bounds.y), width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) };
-    // Capture the composited Electron page directly. Chromium's DevTools screenshot path can stall on
-    // continuously animated WebGL canvases on Windows even while the renderer and ambient worker are healthy.
+    // This still samples a real composited screenshot, not renderer probes or simulated pixels.
     this.pixelCaptureStage = 'window';
     const window = await this.app.browserWindow(page);
     this.pixelCaptureStage = 'capture';
