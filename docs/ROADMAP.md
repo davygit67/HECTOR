@@ -10,7 +10,7 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Branches
 
-`main` holds only the initial commit. All HECTOR work so far is on `feat/hector-studio`, which branches from `main`. It is integrated through a pull request after review; never merge it directly, and never push to `main`.
+`main` contains the app. Make subsequent changes on feature branches and submit them for review.
 
 ## Blockers
 
@@ -20,7 +20,7 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Now: close out M1 (basic mapper) and capture
 
-- Open the draft PR and fix whatever the first Windows/macOS CI run reports.
+- Re-run Windows/macOS CI to validate the loop-safe staging playback assertions; local Linux checks pass, desktop qualification still needs a supported display.
 - Interactive macOS run of `npm run check`, `npm run smoke` (with `HECTOR_CAPTURE_TESTS=1` after granting Screen Recording) and the manual checklist.
 - Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.
 - Install-test the unsigned NSIS installer; check the ad-hoc-signed macOS DMG opens on Apple Silicon and Intel.
