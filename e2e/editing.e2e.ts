@@ -62,7 +62,7 @@ test('corner and surface dragging, fine drag, convexity guard, lock, nudge, rota
     const scaled = await corners();
     expect(centroid(scaled)[0]).toBeCloseTo(centroid(pre)[0], 5); expect(centroid(scaled)[1]).toBeCloseTo(centroid(pre)[1], 5);
     expect(scaled[1][0] - scaled[0][0]).toBeCloseTo((pre[1][0] - pre[0][0]) * 1.05, 5);
-    await page.getByRole('button', { name: '↷ 15°' }).click();
+    await page.getByRole('button', { name: 'Rotate 15° clockwise', exact: true }).click();
     await expect.poll(async () => (await corners())[0][0]).not.toBe(scaled[0][0]);
     expect(centroid(await corners())[0]).toBeCloseTo(centroid(scaled)[0], 5);
 
@@ -83,13 +83,13 @@ test('undo and redo through buttons and shortcuts follow the editing mode', asyn
   try {
     const output = await h.openOutput(), page = h.studio, opacity = async () => (await h.draft()).surfaces[0].opacity;
     for (const value of [0.8, 0.6, 0.4]) await h.updateSurface({ opacity: value });
-    await page.getByRole('button', { name: '↶ Undo' }).click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(opacity).toBe(0.6);
     // Focus now sits on the Undo button; shortcuts must still work.
     await page.keyboard.press('Control+z'); await expect.poll(opacity).toBe(0.8);
     await page.keyboard.press('Control+Shift+z'); await expect.poll(opacity).toBe(0.6);
-    await page.getByRole('button', { name: '↷ Redo' }).click(); await expect.poll(opacity).toBe(0.4);
-    await expect(page.getByRole('button', { name: '↷ Redo' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Redo', exact: true }).click(); await expect.poll(opacity).toBe(0.4);
+    await expect(page.getByRole('button', { name: 'Redo', exact: true })).toBeDisabled();
     expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(1);
     // A text field keeps its own undo: Ctrl+Z inside it does not touch the scene.
     await page.getByLabel('Project name').focus(); await page.keyboard.press('Control+z');
@@ -98,7 +98,7 @@ test('undo and redo through buttons and shortcuts follow the editing mode', asyn
     await h.ok({ type: 'mode', mode: 'live', resolution: 'apply' });
     await h.updateSurface({ opacity: 0.2 });
     expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.2);
-    await page.getByRole('button', { name: '↶ Undo' }).click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(async () => (await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.4);
     await page.keyboard.press('Control+Shift+z');
     await expect.poll(async () => (await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.2);

@@ -14,6 +14,7 @@ export const fullFrame: Surface['corners'] = [[0, 0], [1, 0], [1, 1], [0, 1]];
 export class Hector {
   output: Page | null = null;
   readonly errors: string[] = [];
+  pixelCaptureStage = 'idle';
   /** Console errors matching these are expected by the current test (for example a deliberately missing file). */
   readonly expectedErrors: RegExp[] = [];
   private constructor(readonly app: ElectronApplication, readonly studio: Page, readonly profile: string, private ownsProfile: boolean) {}
@@ -85,9 +86,11 @@ export class Hector {
     return (await this.draft()).sources.filter(s => !before.has(s.id));
   }
   /** Average RGB around normalized points of a window's projection canvas, from a real screenshot. */
-  async pixels(page: Page, points: Point[]): Promise<Rgb[]> {
-    const png = await page.locator('canvas.projection').screenshot();
-    return this.app.evaluate(({ nativeImage }, { data, points }) => {
+  async pixels(page: Page, points: Point[], animated = false): Promise<Rgb[]> {
+    this.pixelCaptureStage = 'screenshot';
+    const png = animated ? await this.animatedCanvas(page) : await page.locator('canvas.projection').screenshot();
+    this.pixelCaptureStage = 'pixels';
+    const pixels = await this.app.evaluate(({ nativeImage }, { data, points }) => {
       const image = nativeImage.createFromBuffer(Buffer.from(data, 'base64')).resize({ width: 480 });
       const { width, height } = image.getSize(), bitmap = image.toBitmap();
       return points.map(([x, y]) => {
@@ -97,6 +100,31 @@ export class Hector {
         return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)] as [number, number, number];
       });
     }, { data: png.toString('base64'), points });
+    this.pixelCaptureStage = 'complete';
+    return pixels;
+  }
+  /** Capture a continuously animated canvas without waiting for Playwright's element stability check.
+   * Callers must poll the expected pixels because capture can precede the next rendered frame. */
+  private async animatedCanvas(page: Page): Promise<Buffer> {
+    const canvas = page.locator('canvas.projection');
+    this.pixelCaptureStage = 'bounds';
+    // Playwright's scrollIntoViewIfNeeded (also used by locator.screenshot) can wait indefinitely
+    // on the Windows runner's animated canvas. Scroll synchronously and measure the real canvas instead.
+    const bounds = await canvas.evaluate(element => {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+    if (!bounds.width || !bounds.height) throw new Error('Projection canvas is not visible.');
+    const rect = { x: Math.floor(bounds.x), y: Math.floor(bounds.y), width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) };
+    // This still samples a real composited screenshot, not renderer probes or simulated pixels.
+    this.pixelCaptureStage = 'window';
+    const window = await this.app.browserWindow(page);
+    this.pixelCaptureStage = 'capture';
+    try {
+      const data = await window.evaluate(async (window, rect) => (await window.webContents.capturePage(rect)).toPNG().toString('base64'), rect);
+      return Buffer.from(data, 'base64');
+    } finally { await window.dispose(); }
   }
 }
 
@@ -106,3 +134,4 @@ export function expectColors(actual: Rgb[], expected: Rgb[], tolerance = 40) {
   const describe = (list: Rgb[]) => list.map(c => `(${c.join(',')})`).join(' ');
   expect(actual.every((c, i) => near(c, expected[i], tolerance)), `pixels ${describe(actual)} vs expected ${describe(expected)}`).toBe(true);
 }
+

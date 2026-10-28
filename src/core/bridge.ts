@@ -1,5 +1,6 @@
 import type { Command, Scene, Source } from './model';
 import type { EditMode, SessionState } from './session';
+import type { PlayerStatus } from './youtube';
 export interface DisplayInfo { id: number; label: string; width: number; height: number; primary: boolean }
 export interface OutputState {
   open: boolean; fullscreen: boolean; displayId: number | null; blackout: boolean; disconnected: boolean;
@@ -13,7 +14,9 @@ export interface CaptureChoice { id: string; name: string; kind: 'screen' | 'win
 export type CaptureAccess = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'not-required' | 'unknown';
 export interface Snapshot {
   session: SessionState; displays: DisplayInfo[]; output: OutputState; transport: Transport;
-  assets: Record<string, { url: string; missing: boolean }>; captures: Record<string, CaptureGrant>; setups: string[];
+  assets: Record<string, { url: string; missing: boolean }>; captures: Record<string, CaptureGrant>;
+  /** YouTube player windows, keyed by playerKey(source). */
+  players: Record<string, PlayerStatus>; setups: string[];
   platform: string; captureAccess: CaptureAccess;
 }
 export type Request =
@@ -25,6 +28,8 @@ export type Request =
   | { type: 'transport'; playing: boolean; position?: number }
   | { type: 'relink'; assetId: string }
   | { type: 'capture.add'; sourceId: string; replace?: string }
+  | { type: 'youtube.add'; link: string }
+  | { type: 'youtube.reload' | 'youtube.show'; sourceId: string }
   | { type: 'setup.save'; name: string }
   | { type: 'setup.load'; name: string };
 export interface RequestResult { ok: boolean; error?: string; choices?: CaptureChoice[] }
@@ -44,7 +49,9 @@ export interface MediaProbe {
   droppedFrames: number | null; totalFrames: number | null; width: number; height: number; live: boolean | null;
 }
 /** Read-only renderer measurements for diagnostics and automated qualification. */
-export interface RendererProbe { frames: number; slowFrames: number; maxIntervalMs: number; intervals: number[]; media: MediaProbe[] }
+/** Ambient backlight measurements for one lit surface in one renderer. */
+export interface AmbientProbe { surfaceId: string; samples: number; analysisMs: number; fieldMs: number; dark: boolean; sampleAgeMs: number | null; alpha: number; asyncReadback: boolean; worker: boolean }
+export interface RendererProbe { frames: number; slowFrames: number; maxIntervalMs: number; intervals: number[]; media: MediaProbe[]; ambient: AmbientProbe[] }
 /** Opt-in timing trace; all times are performance.now() milliseconds in the renderer. */
 export interface FrameTrace {
   start: number; end: number;

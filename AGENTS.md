@@ -7,6 +7,7 @@ Applies to the whole repository. The user's current instructions win on conflict
 - HECTOR is an independently implemented Windows/macOS projection-mapping app (Electron, React, TypeScript, Vite, WebGL). The first release is the full scope in `docs/FEATURE_PARITY.md`. The basic mapper is only a milestone. Never silently drop scope.
 - `docs/ROADMAP.md` is the single list of outstanding work, blockers and next steps. Update it instead of writing handoff notes, and don't log completed work that Git already records.
 - [projection-mapper](https://github.com/adknate05/projection-mapper) and [FREEkMapper](https://github.com/v-prgmr/FREEkMapper) are behavioral references only. Never copy, fork, merge, import or clone their code, assets or history.
+  - One exception, authorized by the repository owner: the ambient backlight code in `src/ambient/` is adapted from adknate05's code on the `codex/nate-projection-mapper` branch, with attribution. See `docs/THIRD_PARTY.md`. The exception covers that supplied code only, not the rest of that branch and not third-party code.
 
 ## Workflow
 

@@ -86,15 +86,15 @@ test('switching to Live Edit with pending changes requires Apply, Discard or Can
   const h = await Hector.launch();
   try {
     const output = await h.openOutput();
-    const mode = h.studio.getByLabel('Editing mode'), dialog = h.studio.getByRole('dialog', { name: 'Publish pending changes?' });
+    const mode = h.studio.getByRole('radiogroup', { name: 'Editing mode' }), dialog = h.studio.getByRole('dialog', { name: 'Publish pending changes?' });
     await h.updateSurface({ opacity: 0.4 });
-    await mode.selectOption('live');
+    await mode.getByRole('radio', { name: 'Live Edit' }).click();
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
     expect((await h.snapshot()).session).toMatchObject({ mode: 'preview', unapplied: true });
 
-    await mode.selectOption('live');
+    await mode.getByRole('radio', { name: 'Live Edit' }).click();
     await dialog.getByRole('button', { name: 'Discard & switch' }).click();
     await expect.poll(async () => (await h.snapshot()).session.mode).toBe('live');
     expect((await h.draft()).surfaces[0].opacity).toBe(1);
@@ -105,10 +105,10 @@ test('switching to Live Edit with pending changes requires Apply, Discard or Can
     await h.ok({ type: 'undo' });
     expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(1);
 
-    await mode.selectOption('preview');
+    await mode.getByRole('radio', { name: 'Preview & Apply' }).click();
     await expect.poll(async () => (await h.snapshot()).session.mode).toBe('preview');
     await h.updateSurface({ opacity: 0.7 });
-    await mode.selectOption('live');
+    await mode.getByRole('radio', { name: 'Live Edit' }).click();
     await dialog.getByRole('button', { name: 'Apply & switch' }).click();
     await expect.poll(async () => (await h.snapshot()).session.mode).toBe('live');
     expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.7);

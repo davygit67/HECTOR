@@ -10,8 +10,12 @@ import type { CaptureAccess, CaptureChoice, CaptureGrant, RequestResult, Snapsho
 import { atomicWrite, readProject } from './persistence';
 import { outputAction } from './output-policy';
 import { serveFile } from './media-protocol';
+import { playerPreload, playerScheme, YouTubePlayers } from './youtube';
+import { parseYouTubeLink, playerKey } from '../src/core/youtube';
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'hector-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: 'hector-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+  // The YouTube player page: a secure origin of its own, served only inside the isolated player session.
+  { scheme: playerScheme, privileges: { standard: true, secure: true } }]);
 app.setName('HECTOR');
 if (process.env.HECTOR_TEST_DATA) app.setPath('userData', resolve(process.env.HECTOR_TEST_DATA));
 let studio: BrowserWindow | null = null, output: BrowserWindow | null = null;
@@ -27,6 +31,8 @@ let outputErrors: string[] = [];
 let setupNames: string[] = [];
 let startupError = '';
 let transport: Transport = { playing: true, position: 0, anchor: Date.now(), revision: 0 };
+/** Official YouTube player windows, one per YouTube source in the draft or applied scene. */
+const players = new YouTubePlayers(playerPreload(__dirname), () => broadcast(), () => studio && !studio.isDestroyed() ? screen.getDisplayMatching(studio.getBounds()).workArea : null);
 const dataPath = () => join(app.getPath('userData'), 'projects');
 const assetEntries = (scene: Scene) => Object.fromEntries(scene.sources.filter(s => s.assetId && assets.has(s.assetId)).map(s => [s.assetId!, assets.get(s.assetId!)!]));
 const document = (scene: Scene) => ({ format: 'hector', version: 1, scene, assets: assetEntries(scene) });
@@ -43,6 +49,8 @@ const requestSchema = z.union([
   z.object({ type: z.literal('transport'), playing: z.boolean(), position: z.number().finite().min(0).max(86400).optional() }).strict(),
   z.object({ type: z.literal('relink'), assetId: idSchema }).strict(),
   z.object({ type: z.literal('capture.add'), sourceId: z.string().min(1).max(200), replace: idSchema.optional() }).strict(),
+  z.object({ type: z.literal('youtube.add'), link: z.string().max(4096) }).strict(),
+  z.object({ type: z.enum(['youtube.reload', 'youtube.show']), sourceId: idSchema }).strict(),
   z.object({ type: z.enum(['setup.save', 'setup.load']), name: setupName }).strict()
 ]);
 const reportSchema = z.object({ errors: z.array(z.string().max(300)).max(16) }).strict();
@@ -68,16 +76,21 @@ function snapshot(): Snapshot {
     output: { open: !!output, fullscreen: output?.isFullScreen() ?? false, displayId: selectedDisplay, blackout, disconnected, errors: outputErrors }, transport,
     assets: Object.fromEntries([...assets].map(([id, path]) => [id, { url: `hector-media://asset/${id}`, missing: !existsSync(path) }])),
     captures: Object.fromEntries([...captures].map(([id, grant]) => [id, { name: grant.name, kind: grant.kind }])),
-    setups: setupNames, platform: process.platform, captureAccess: captureAccess() };
+    players: players.status(), setups: setupNames, platform: process.platform, captureAccess: captureAccess() };
 }
-function broadcast() { const state = snapshot(); for (const window of [studio, output]) if (window && !window.isDestroyed()) window.webContents.send('hector:state', state); }
+/** Players follow the scenes: draft sources are previewed silently, applied sources are heard while output is open. */
+function syncPlayers() {
+  const audible = !!output && !output.isDestroyed() && output.isVisible() && !disconnected;
+  players.sync({ scene: controller.draft, audible: false, playing: transport.playing }, { scene: controller.applied, audible, playing: transport.playing });
+}
+function broadcast() { syncPlayers(); const state = snapshot(); for (const window of [studio, output]) if (window && !window.isDestroyed()) window.webContents.send('hector:state', state); }
 function authorize(event: IpcMainInvokeEvent | IpcMainEvent, write = false) {
   if (event.sender !== studio?.webContents && (write || event.sender !== output?.webContents)) throw new Error('Unknown or unauthorized window.');
   if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) throw new Error('Subframes cannot access desktop APIs.');
 }
 function createWindow(isOutput: boolean) {
   const window = new BrowserWindow({ title: isOutput ? 'HECTOR Output' : 'HECTOR Studio', width: isOutput ? 960 : 1440, height: isOutput ? 540 : 900,
-    minWidth: isOutput ? 320 : 1024, minHeight: isOutput ? 240 : 650, show: false, backgroundColor: '#090a0e', autoHideMenuBar: true,
+    minWidth: isOutput ? 320 : 1024, minHeight: isOutput ? 240 : 650, show: false, backgroundColor: isOutput ? '#000000' : '#f2f0e9', autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, webSecurity: true,
       autoplayPolicy: 'no-user-gesture-required' } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -153,7 +166,7 @@ function checkGrants(source: Source) {
 }
 async function listCaptureSources(): Promise<CaptureChoice[]> {
   // HECTOR's own windows are excluded: capturing them would only create feedback loops.
-  const own = new Set([studio, output].filter((w): w is BrowserWindow => !!w && !w.isDestroyed()).map(w => w.getMediaSourceId()));
+  const own = new Set([...[studio, output].filter((w): w is BrowserWindow => !!w && !w.isDestroyed()).map(w => w.getMediaSourceId()), ...players.mediaSourceIds()]);
   const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false });
   captureChoices = new Map();
   return sources.filter(s => !own.has(s.id)).map(s => {
@@ -170,7 +183,16 @@ async function handle(raw: unknown): Promise<RequestResult> {
   if (request.type === 'blackout') { blackout = request.value; broadcast(); return { ok: true }; }
   if (request.type === 'transport') {
     const current = transport.position + (transport.playing ? (Date.now() - transport.anchor) / 1000 : 0);
-    transport = { playing: request.playing, position: request.position ?? current, anchor: Date.now(), revision: transport.revision + 1 }; broadcast(); return { ok: true };
+    transport = { playing: request.playing, position: request.position ?? current, anchor: Date.now(), revision: transport.revision + 1 };
+    if (request.position !== undefined) players.seek(request.position);
+    broadcast(); return { ok: true };
+  }
+  // Player window controls are operational: they never change the scene.
+  if (request.type === 'youtube.reload' || request.type === 'youtube.show') {
+    const source = [...controller.draft.sources, ...controller.applied.sources].find(s => s.id === request.sourceId && s.kind === 'youtube');
+    if (!source) throw new Error('That YouTube source is no longer in the project.');
+    if (request.type === 'youtube.reload') players.reload(playerKey(source)); else players.show(playerKey(source));
+    return { ok: true };
   }
   // Listing does not change state, but it may take a moment (thumbnails), so keep it outside the edit lock.
   if (request.type === 'capture.sources') return { ok: true, choices: await listCaptureSources() };
@@ -211,6 +233,12 @@ async function handle(raw: unknown): Promise<RequestResult> {
         for (const source of next.sources) if (source.assetId === request.assetId) { if (source.kind !== mediaKind) throw new Error('Relink requires the same media type.'); source.assetId = newId; replaced = true; }
         if (!replaced) throw new Error('Asset is not in the draft.');
         assets.set(newId, path); controller.stage(next); break;
+      }
+      case 'youtube.add': {
+        const link = parseYouTubeLink(request.link); if (!link.ok) throw new Error(link.error);
+        if (controller.draft.sources.length >= 64) throw new Error('Maximum 64 sources per project.');
+        controller.command({ type: 'source.put', source: { id: randomUUID(), kind: 'youtube', name: `YouTube · ${link.videoId}`, videoId: link.videoId, start: link.start, color: '#8f72ff', loop: false, speed: 1, volume: 0 } });
+        break;
       }
       case 'capture.add': {
         const choice = captureChoices.get(request.sourceId);
@@ -308,11 +336,19 @@ else {
         const captureId = idSchema.parse(raw);
         // Each window may only start captures that the scene it renders uses: studio → draft, output → applied.
         const scene = event.sender === output?.webContents ? controller.applied : controller.draft;
+        // A YouTube player window is captured like any granted window, but only by a window whose scene plays it.
+        const player = players.capture(captureId, scene);
+        if (player) { pendingCaptures.set(event.sender.id, { ...player, expires: Date.now() + 10_000 }); return { ok: true }; }
         if (!scene.sources.some(s => s.kind === 'capture' && s.captureId === captureId)) throw new Error('That capture is not part of this window’s scene.');
         const grant = captures.get(captureId); if (!grant) throw new Error('Capture not connected. Choose the screen or window again in Media.');
         pendingCaptures.set(event.sender.id, { desktopId: grant.desktopId, name: grant.name, expires: Date.now() + 10_000 });
         return { ok: true };
       } catch (error) { return { ok: false, error: message(error) }; }
+    });
+    // Player windows only report their own status; they cannot reach any other HECTOR channel.
+    ipcMain.on('hector:player-report', (event, raw) => {
+      try { players.report(event.sender, !!event.senderFrame && event.senderFrame === event.sender.mainFrame, raw); }
+      catch { /* Malformed reports are ignored. */ }
     });
     ipcMain.on('hector:report', (event, raw) => {
       try {
@@ -322,6 +358,8 @@ else {
       } catch { /* Malformed or unauthorized reports are ignored. */ }
     });
     studio = createWindow(false);
+    // A restored project may already contain YouTube sources.
+    syncPlayers();
     studio.on('close', event => {
       if (!controller.snapshot().unsaved || process.env.HECTOR_TEST_DATA) return;
       const choice = dialog.showMessageBoxSync(studio!, { type: 'question', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0, message: 'This draft has unsaved changes.' });
@@ -331,5 +369,6 @@ else {
     if (startupError) void dialog.showMessageBox(studio, { type: 'error', message: startupError });
     screen.on('display-added', displayChanged); screen.on('display-removed', displayChanged); screen.on('display-metrics-changed', displayChanged);
   }).catch(error => { console.error('HECTOR startup failed:', error); app.quit(); });
+  app.on('before-quit', () => players.dispose());
   app.on('window-all-closed', () => app.quit());
 }

@@ -104,7 +104,7 @@ test('save and apply failures keep both the output and the draft', async () => {
     expect(state.session.draft.surfaces[0].opacity).toBe(0.3);
 
     // Apply & switch to Live fails the same way: mode, draft and output are unchanged; the dialog stays open.
-    await page.getByLabel('Editing mode').selectOption('live');
+    await page.getByRole('radio', { name: 'Live Edit' }).click();
     const dialog = page.getByRole('dialog', { name: 'Publish pending changes?' });
     await dialog.getByRole('button', { name: 'Apply & switch' }).click();
     await expect(dialog).toBeVisible();
