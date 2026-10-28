@@ -72,3 +72,7 @@ Known limits:
 Development happens on the `feat/hector-studio` branch, which branches from `main` (currently just the initial commit). It is integrated into `main` through a reviewed pull request.
 
 HECTOR contains no code, assets, or history from the projects it studied ([projection-mapper](https://github.com/adknate05/projection-mapper), [FREEkMapper](https://github.com/v-prgmr/FREEkMapper)).
+
+### Studio Live view
+
+Use **Live view: On/Off** above the mapping canvas to suspend the studio preview while the projected output continues playing. Off releases preview media and capture streams and stops preview rendering; mapping handles remain available. Turn it on to recreate the preview from the current scene and transport. The footer Play/Pause control still controls playback globally.

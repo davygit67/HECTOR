@@ -20,6 +20,8 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Now: close out M1 (basic mapper) and capture
 
+- Validate the studio Live view toggle on Windows/macOS: preview resources release while output continues, and preview resumes after repeated toggles. Desktop CI and manual qualification remain pending.
+
 - Re-run Windows/macOS CI to validate the loop-safe staging playback assertions; local Linux checks pass, desktop qualification still needs a supported display.
 - Interactive macOS run of `npm run check`, `npm run smoke` (with `HECTOR_CAPTURE_TESTS=1` after granting Screen Recording) and the manual checklist.
 - Physical checks in [QUALIFICATION.md](QUALIFICATION.md#manual-hardware-checklist): extended desktop, fullscreen while editing or switching apps, disconnect/reconnect, sleep/wake.

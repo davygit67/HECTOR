@@ -17,7 +17,7 @@ function Viewport({ scene, snapshot, quality, onDiagnostics, onError }: { scene:
     catch (e) { onError(String(e)); }
     const lost = (event: Event) => { event.preventDefault(); onError('GPU context lost. Close and reopen output, or restart HECTOR after saving.'); };
     const element = canvas.current!; element.addEventListener('webglcontextlost', lost);
-    return () => { element.removeEventListener('webglcontextlost', lost); renderer.current?.dispose(); };
+    return () => { element.removeEventListener('webglcontextlost', lost); renderer.current?.dispose(); renderer.current = null; delete window.hectorProbe; };
   }, [onDiagnostics, onError]);
   useEffect(() => { renderer.current?.update(scene, snapshot.assets, snapshot.captures, snapshot.transport, isOutput && snapshot.output.blackout); }, [scene, snapshot]);
   useEffect(() => { renderer.current?.setQuality(quality); }, [quality]);
@@ -32,6 +32,7 @@ function App() {
   const [selected, setSelected] = useState('surface-1'), [tab, setTab] = useState('Layers'), [inspector, setInspector] = useState('Transform');
   const [diagnostics, setDiagnostics] = useState(emptyDiagnostics), [display, setDisplay] = useState<number | null>(null);
   const [quality, setQuality] = useState(isOutput ? 1 : .65), [switchDialog, setSwitchDialog] = useState(false), [ai, setAi] = useState(false);
+  const [liveView, setLiveView] = useState(true);
   const [left, setLeft] = useState(true), [right, setRight] = useState(true), [collapsed, setCollapsed] = useState<string[]>([]);
   const [dragCorners, setDragCorners] = useState<Surface['corners'] | null>(null), [corner, setCorner] = useState(0), [pending, setPending] = useState(false);
   const gesture = useRef<{ surface: Surface; index: number; start: Point; corners: Surface['corners'] } | null>(null);
@@ -132,9 +133,9 @@ function App() {
         {tab === 'Setups' && <div className="panel-content"><p className="hint">Named snapshots of the draft. Recall follows the current editing mode.</p><label className="field"><span>Setup name</span><input aria-label="Setup name" value={setupName} placeholder={scene.name} maxLength={80} onChange={e => setSetupName(e.target.value)}/></label><button className="primary" onClick={async () => { if (await send({ type: 'setup.save', name: setupName.trim() || scene.name })) setSetupName(''); }}>Save named setup</button>{snapshot.setups.map(name => <button className="setup" key={name} onClick={() => void send({ type: 'setup.load', name })}><span>▧ {name}</span><small>Recall</small></button>)}<p className="hint">Names may contain letters, numbers, spaces, underscores and hyphens. Portable export copies media; named setups reference local files.</p></div>}
         <div className="sidebar-bottom"><span className="dot live"/> LOCAL WORKSPACE <button onClick={() => setLeft(false)} aria-label="Collapse library">‹</button></div>
       </aside>}
-      <main className="center"><div className="canvas-toolbar"><div className="row">{!left && <button onClick={() => setLeft(true)}>Library ›</button>}<span className="eyebrow">MAPPING CANVAS</span><span className="badge">DRAFT</span></div><div className="row"><button disabled={!state.canUndo || pending} onClick={() => void send({ type: 'undo' })}>↶ Undo</button><button disabled={!state.canRedo || pending} onClick={() => void send({ type: 'redo' })}>↷ Redo</button><button disabled={!state.unapplied || pending} onClick={() => void send({ type: 'discard' })}>Discard</button><button onClick={() => setRight(!right)}>{right ? 'Hide inspector' : 'Inspector ‹'}</button></div></div>
+      <main className="center"><div className="canvas-toolbar"><div className="row">{!left && <button onClick={() => setLeft(true)}>Library ›</button>}<span className="eyebrow">MAPPING CANVAS</span><span className="badge">DRAFT</span><button type="button" aria-label="Live view" aria-pressed={liveView} title="Pause studio preview rendering and media; projected output keeps playing" onClick={() => { setLiveView(value => !value); setDiagnostics(emptyDiagnostics); }}>Live view: {liveView ? 'On' : 'Off'}</button></div><div className="row"><button disabled={!state.canUndo || pending} onClick={() => void send({ type: 'undo' })}>↶ Undo</button><button disabled={!state.canRedo || pending} onClick={() => void send({ type: 'redo' })}>↷ Redo</button><button disabled={!state.unapplied || pending} onClick={() => void send({ type: 'discard' })}>Discard</button><button onClick={() => setRight(!right)}>{right ? 'Hide inspector' : 'Inspector ‹'}</button></div></div>
         <div className="canvas-space"><div className="canvas-label"><span>{scene.width} × {scene.height}</span><span>{state.mode === 'preview' ? 'Changes stay here until applied' : 'LIVE · changes publish immediately'}</span></div>
-          <div className="canvas-frame" style={{ aspectRatio: `${scene.width}/${scene.height}` }}><Viewport scene={previewScene} snapshot={snapshot} quality={quality} onDiagnostics={setDiagnostics} onError={onError}/>
+          <div className="canvas-frame" style={{ aspectRatio: `${scene.width}/${scene.height}` }}>{liveView ? <Viewport scene={previewScene} snapshot={snapshot} quality={quality} onDiagnostics={setDiagnostics} onError={onError}/> : <div className="preview-paused" role="status">Live view paused<span>Projected output continues playing</span></div>}
             <svg ref={svg} className="handles" tabIndex={0} aria-label="Mapping canvas" viewBox="0 0 1920 1080" preserveAspectRatio="none" onPointerMove={event => {
               const current = gesture.current; if (!current) return; const p = point(event), delta: Point = [p[0]-current.start[0],p[1]-current.start[1]];
               const factor = event.altKey ? .1 : 1;
