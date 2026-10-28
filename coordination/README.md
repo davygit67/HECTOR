@@ -4,11 +4,11 @@ Shared root: `/Users/natebesthoff/Documents/ChatGPT/Projection Mapper`
 
 The tasks use this exact directory. Changes are immediately visible to all of them. This folder is the shared coordination entry point, not another copy of the application.
 
-## HECTOR branch publication — October 28, in progress
+## HECTOR branch publication — October 28, published
 
 User explicitly requested the entire current project in a new branch of private davygit67/HECTOR. Both editor tasks are idle, the checkout is clean and guarded origin sync was up-to-date. CLI account permissions confirm push access (the connected GitHub app cannot see this repository). Added secondary remote hector; keep origin and local main unchanged. The target is codex/nate-projection-mapper, preserving the full source/history without replacing HECTOR main. Fetched HECTOR has no common ancestor with this project; integration remains deliberate future work, not an automatic merge.
 
-Agent owns the handoff guide and this publication's coordination notes. Full outgoing history passed the credential/private-file guard (668 unique file versions before these notes). Validation is complete:244app tests,173agent tests,21helper tests pass; two optional C# fixtures skip. App typecheck and agent/helper builds pass. Defer other edits/staging/synchronization until the owned documentation and exact snapshot are published and verified. No runtime restart, credential transfer or background sync automation. See [HECTOR handoff](../agent/HECTOR_HANDOFF.md). The older heartbeat claim in COLLABORATING.md is historical; the recurring job was removed.
+Agent owns the handoff guide and this publication's coordination notes. Full outgoing history passed the credential/private-file guard (668 unique file versions before these notes). Validation is complete:244app tests,173agent tests,21helper tests pass; two optional C# fixtures skip. App typecheck and agent/helper builds pass. Published the full377-file tree and project history at5f83305 to hector/codex/nate-projection-mapper; independent GitHub commit/tree and ls-remote checks match local source exactly. HECTOR main remains769f549. Final owned release notes follow, then normal idle/clean synchronization resumes. Local main still tracks origin/main; HECTOR is a separate publication target, not an automatic second sync destination. No runtime restart, credential transfer or background sync automation. See [HECTOR handoff](../agent/HECTOR_HANDOFF.md). The older heartbeat claim in COLLABORATING.md is historical; the recurring job was removed.
 
 ## ChatGPT / Codex cloud account connection — October 28, delivery verified
 
