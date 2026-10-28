@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -199,6 +200,22 @@ test('stdio MCP proxy talks to the same durable inbox without starting a second 
   assert.equal(f.inbox.status().counts.queued, 1);
   const online = await client.callTool({ name: 'get_projector_status', arguments: {} }); assert.equal(online.isError, false);
   assert.match(JSON.stringify(online.content), /home-studio/);
+});
+
+test('local MCP launcher discovers tools from an unrelated working directory with private file settings', async t => {
+  const f = await httpFixture(t), client = new Client({ name: 'tunnel-launch-test', version: '1.0.0' });
+  const file = join(f.dir, 'private settings.env');
+  writeFileSync(file, `PROJECTION_RELAY_URL="${f.url}"\nPROJECTION_RELAY_SUBMIT_TOKEN="${f.submitToken}"\n`, { mode: 0o600 });
+  const transport = new StdioClientTransport({ command: process.execPath,
+    args: [fileURLToPath(new URL('../mcp-local.mjs', import.meta.url)), file], cwd: f.dir, env: {}, stderr: 'pipe' });
+  await client.connect(transport); cleanup(t, () => client.close());
+  const tools = await client.listTools();
+  assert.deepEqual(tools.tools.map(tool => tool.name).sort(), [
+    'cancel_projection_request', 'get_projection_request', 'get_projector_status', 'publish_task_update', 'request_projection',
+  ]);
+  const status = await client.callTool({ name: 'get_projector_status', arguments: {} });
+  assert.equal(status.isError, false); assert.match(JSON.stringify(status.content), /home-studio/);
+  assert.equal(f.inbox.status().counts.queued, 0);
 });
 
 test('cancellation between claim and start leaves no blocked receipt and permits later jobs', async t => {
