@@ -1,5 +1,6 @@
 import type { Source } from '../core/model';
 import type { FrameTrace, MediaProbe, Snapshot, Transport } from '../core/bridge';
+import { playerKey } from '../core/youtube';
 interface FrameMeta { mediaTime: number; presentationTime: number; expectedDisplayTime: number; presentedFrames: number }
 export interface MediaEntry {
   key: string; element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement;
@@ -10,8 +11,16 @@ export interface MediaEntry {
   source: Source; transport: Transport;
   /** Metadata of the newest decoded frame, from requestVideoFrameCallback. */
   meta: FrameMeta | null;
-  /** Live capture stream owned by this entry (capture sources only). */
+  /** Live capture stream owned by this entry (capture and YouTube sources). */
   stream: MediaStream | null;
+  /** The YouTube player's own problem, kept apart from capture errors so a recovered player clears only its own. */
+  playerProblem: string;
+}
+/** Why a YouTube player cannot feed this source, if it cannot. Loading and paused players are not errors. */
+export function playerProblem(status: Snapshot['players'][string] | undefined) {
+  if (status?.state === 'error') return status.error;
+  if (status?.state === 'closed') return 'YouTube player closed. Reopen it in Media.';
+  return '';
 }
 export function mediaIdentity(source: Source, url: string) { return `${source.kind}:${source.assetId ?? source.captureId ?? source.id}:${url}`; }
 export const captureMessages = {
@@ -35,19 +44,20 @@ export class MediaRegistry {
   /** arm + getDisplayMedia pairs must not interleave within one window. */
   private captureQueue: Promise<void> = Promise.resolve();
   constructor(private preview: boolean) {}
-  reconcile(sources: Source[], assets: Snapshot['assets'], captures: Snapshot['captures'], transport: Transport) {
+  reconcile(sources: Source[], assets: Snapshot['assets'], captures: Snapshot['captures'], transport: Transport, players: Snapshot['players'] = {}) {
     const wanted = new Set(sources.map(s => s.id));
     for (const [id, entry] of this.entries) if (!wanted.has(id)) { this.release(entry); this.entries.delete(id); }
     for (const source of sources) {
-      if (!['video', 'image', 'clock', 'capture'].includes(source.kind)) continue;
-      const asset = source.assetId ? assets[source.assetId] : undefined;
-      const key = mediaIdentity(source, asset?.url ?? '');
+      if (!['video', 'image', 'clock', 'capture', 'youtube'].includes(source.kind)) continue;
+      const asset = source.assetId ? assets[source.assetId] : undefined, player = source.kind === 'youtube' ? players[playerKey(source)] : undefined;
+      // A YouTube entry is rebuilt whenever its player window (and so its capture) is replaced.
+      const key = mediaIdentity(source, source.kind === 'youtube' ? `${playerKey(source)}#${player?.captureId ?? ''}` : asset?.url ?? '');
       let entry = this.entries.get(source.id);
       if (entry?.key !== key) {
         if (entry) this.release(entry);
-        const element = source.kind === 'video' || source.kind === 'capture' ? document.createElement('video') : source.kind === 'image' ? new Image() : document.createElement('canvas');
+        const element = source.kind === 'video' || source.kind === 'capture' || source.kind === 'youtube' ? document.createElement('video') : source.kind === 'image' ? new Image() : document.createElement('canvas');
         entry = { key, element, dirty: true, error: asset?.missing ? 'Missing file — relink in Media' : '', lastSecond: -1, disposed: false, revision: -1,
-          generation: ++generations, source, transport, meta: null, stream: null };
+          generation: ++generations, source, transport, meta: null, stream: null, playerProblem: '' };
         this.entries.set(source.id, entry);
         const current = entry;
         if (element instanceof HTMLVideoElement) {
@@ -69,6 +79,10 @@ export class MediaRegistry {
             element.muted = true;
             if (!source.captureId || !captures[source.captureId]) current.error = captureMessages.missing;
             else { const captureId = source.captureId; this.captureQueue = this.captureQueue.then(() => this.startCapture(current, captureId)); }
+          } else if (source.kind === 'youtube') {
+            // The player window plays (and is heard) on its own; this element only shows its captured frames.
+            element.muted = true;
+            if (player?.captureId) { const captureId = player.captureId; this.captureQueue = this.captureQueue.then(() => this.startCapture(current, captureId)); }
           } else if (asset && !asset.missing) element.src = asset.url;
         } else if (element instanceof HTMLImageElement) {
           element.crossOrigin = 'anonymous'; element.onload = () => { current.dirty = true; };
@@ -77,6 +91,11 @@ export class MediaRegistry {
         } else { element.width = 1024; element.height = 512; }
       }
       entry.source = source; entry.transport = transport;
+      if (source.kind === 'youtube') {
+        const problem = playerProblem(player);
+        if (problem) entry.error = problem; else if (entry.error && entry.error === entry.playerProblem) entry.error = '';
+        entry.playerProblem = problem;
+      }
       this.configure(entry);
     }
   }
@@ -100,7 +119,7 @@ export class MediaRegistry {
   }
   private configure(entry: MediaEntry) {
     const video = entry.element, { source, transport } = entry;
-    if (!(video instanceof HTMLVideoElement) || entry.disposed || source.kind === 'capture') return;
+    if (!(video instanceof HTMLVideoElement) || entry.disposed || source.kind === 'capture' || source.kind === 'youtube') return;
     // Read before touching loop: enabling loop clears `ended`.
     const finished = video.ended;
     video.muted = this.preview || source.volume === 0; video.volume = source.volume; video.loop = source.loop;

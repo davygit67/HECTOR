@@ -1,7 +1,8 @@
 import type { Scene } from '../core/model';
-import type { FrameTrace, RendererProbe, Snapshot, Transport } from '../core/bridge';
+import type { AmbientProbe, FrameTrace, RendererProbe, Snapshot, Transport } from '../core/bridge';
 import { MediaRegistry } from '../media/registry';
 import { inverseQuad } from './geometry';
+import { AmbientEngine } from './ambient';
 const vertex = `attribute vec2 position; varying vec2 screenUV; void main(){screenUV=position;gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);}`;
 const fragment = `precision highp float;
 varying vec2 screenUV; uniform mat3 inverseMap; uniform sampler2D media;
@@ -18,7 +19,7 @@ void main(){
  float luma=dot(pixel.rgb,vec3(.2126,.7152,.0722));pixel.rgb=mix(vec3(luma),pixel.rgb,saturation)*brightness;
  gl_FragColor=vec4(pixel.rgb,pixel.a*opacity);
 }`;
-export interface Diagnostics { fps: number; slowFrames: number; videoDropped: number; errors: string[] }
+export interface Diagnostics { fps: number; slowFrames: number; videoDropped: number; errors: string[]; ambient: AmbientProbe[] }
 const traceLimit = 50000;
 export class ProjectionRenderer {
   private gl: WebGLRenderingContext; private program: WebGLProgram; private buffer: WebGLBuffer; private fallback: WebGLTexture;
@@ -28,27 +29,31 @@ export class ProjectionRenderer {
   private total = 0; private maxInterval = 0; private intervals: number[] = [];
   private trace: FrameTrace | null = null; private lastQuality = 0;
   private quality: number; private maps = new Map<string, Float32Array>(); private uniforms = new Map<string, WebGLUniformLocation | null>();
+  private ambient: AmbientEngine;
   constructor(private canvas: HTMLCanvasElement, output: boolean, private diagnostics: (d: Diagnostics) => void) {
-    const gl = canvas.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: false });
+    // WebGL2 lets ambient sampling read back without stalling the GPU; the shaders are GLSL ES 1.0, so WebGL1 still works.
+    const options: WebGLContextAttributes = { alpha: false, antialias: true, preserveDrawingBuffer: false }, gl2 = canvas.getContext('webgl2', options);
+    const gl = (gl2 ?? canvas.getContext('webgl', options)) as WebGLRenderingContext | null;
     if (!gl) throw new Error('WebGL is unavailable. Enable GPU acceleration and update the graphics driver.');
     this.gl = gl; this.media = new MediaRegistry(!output); this.quality = output ? 1 : .65;
     const compile = (type: number, code: string) => { const shader = gl.createShader(type)!; gl.shaderSource(shader, code); gl.compileShader(shader); if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) ?? 'Shader compilation failed'); return shader; };
     this.program = gl.createProgram()!; const vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragment);
-    gl.attachShader(this.program, vs); gl.attachShader(this.program, fs); gl.linkProgram(this.program); gl.deleteShader(vs); gl.deleteShader(fs);
+    gl.attachShader(this.program, vs); gl.attachShader(this.program, fs); gl.bindAttribLocation(this.program, 0, 'position'); gl.linkProgram(this.program); gl.deleteShader(vs); gl.deleteShader(fs);
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program) ?? 'Shader link failed');
     gl.useProgram(this.program); this.buffer = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    const location = gl.getAttribLocation(this.program, 'position'); gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.fallback = gl.createTexture()!; gl.bindTexture(gl.TEXTURE_2D, this.fallback);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,0,255]));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    this.ambient = new AmbientEngine(gl, gl2, this.program);
     this.frame = requestAnimationFrame(this.draw);
   }
   setQuality(quality: number) { this.quality = quality; }
-  update(scene: Scene, assets: Snapshot['assets'], captures: Snapshot['captures'], transport: Transport, blackout = false) {
+  update(scene: Scene, assets: Snapshot['assets'], captures: Snapshot['captures'], transport: Transport, blackout = false, players: Snapshot['players'] = {}) {
     this.scene = scene; this.transport = transport; this.blackout = blackout;
     this.maps.clear(); scene.surfaces.forEach(s => this.maps.set(s.id, inverseQuad(s.corners)));
-    this.media.reconcile(scene.sources, assets, captures, transport);
+    this.media.reconcile(scene.sources, assets, captures, transport, players); this.ambient.reconcile(scene);
     for (const [id, value] of this.textures) if (this.media.entries.get(id)?.key !== value.key) { this.gl.deleteTexture(value.texture); this.textures.delete(id); }
     this.trace?.events.push({ source: '', now: performance.now(), type: 'update' });
   }
@@ -61,37 +66,11 @@ export class ProjectionRenderer {
     if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height; }
     gl.viewport(0, 0, width, height); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     const time = this.transport.position + (this.transport.playing ? (Date.now() - this.transport.anchor) / 1000 : 0);
-    if (scene && !this.blackout) for (const surface of scene.surfaces) {
-      if (!surface.visible || !surface.sourceId) continue;
-      const source = scene.sources.find(s => s.id === surface.sourceId); if (!source) continue;
-      const sourceKind = source.kind === 'gradient' ? 1 : source.kind === 'grid' ? 2 : 0;
-      gl.bindTexture(gl.TEXTURE_2D, this.fallback);
-      if (sourceKind === 0) {
-        const entry = this.media.entries.get(source.id); if (!entry || entry.error) continue;
-        this.media.updateClock(entry, source, time);
-        const element = entry.element;
-        if (element instanceof HTMLVideoElement && element.readyState < 2) continue;
-        if (element instanceof HTMLImageElement && (!element.complete || !element.naturalWidth)) continue;
-        let texture = this.textures.get(source.id);
-        if (!texture) {
-          texture = { key: entry.key, texture: gl.createTexture()! }; this.textures.set(source.id, texture); gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); entry.dirty = true;
-        }
-        gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-        if (entry.dirty) {
-          try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, element); entry.dirty = false; }
-          catch (e) { entry.error = `GPU texture upload failed: ${e instanceof Error ? e.message : String(e)}`; continue; }
-          if (trace && entry.meta && trace.uploads.length < traceLimit) trace.uploads.push({ source: source.id, now, mediaTime: entry.meta.mediaTime, age: now - entry.meta.presentationTime });
-        }
-      }
-      const corners = surface.corners;
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,1,2,0,2,3].flatMap(i => corners[i])), gl.DYNAMIC_DRAW);
-      gl.uniformMatrix3fv(this.uniform('inverseMap'), false, this.maps.get(surface.id)!);
-      gl.uniform4fv(this.uniform('crop'), surface.crop); gl.uniform1f(this.uniform('opacity'), surface.opacity);
-      gl.uniform1f(this.uniform('brightness'), surface.brightness); gl.uniform1f(this.uniform('saturation'), surface.saturation);
-      gl.uniform1f(this.uniform('time'), time * source.speed); gl.uniform1i(this.uniform('kind'), sourceKind); gl.uniform1i(this.uniform('mask'), surface.mask === 'ellipse' ? 1 : 0);
-      gl.uniform3fv(this.uniform('color'), [1,3,5].map(i => parseInt(source.color.slice(i, i+2),16)/255)); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (scene && !this.blackout) {
+      this.ambient.drawGlows(scene, this.maps, now);
+      for (const surface of scene.surfaces) if (surface.visible) this.drawSurface(scene, surface, this.maps.get(surface.id)!, surface.corners, time, now);
+      this.ambient.sample(scene, now, (surface, map, corners) => this.drawSurface(scene, surface, map, corners, time, now), surface => this.stillKey(scene, surface));
+      gl.viewport(0, 0, width, height);
     }
     if (this.last) {
       const interval = now - this.last; if (interval > 25) this.slow++;
@@ -111,13 +90,51 @@ export class ProjectionRenderer {
       const entries = [...this.media.entries.values()];
       this.diagnostics({ fps: this.frames * 1000 / (now - this.since), slowFrames: this.slow,
         videoDropped: entries.reduce((sum,e) => sum + (e.element instanceof HTMLVideoElement ? e.element.getVideoPlaybackQuality().droppedVideoFrames : 0), 0),
-        errors: entries.filter(e => e.error).map(e => e.error) }); this.since = now; this.frames = 0;
+        errors: entries.filter(e => e.error).map(e => e.error), ambient: this.ambient.probe(now) }); this.since = now; this.frames = 0;
     }
   };
+  /** Draws one surface with the given mapping; returns false when its source has no frame to show. */
+  private drawSurface(scene: Scene, surface: Scene['surfaces'][number], map: Float32Array, corners: Scene['surfaces'][number]['corners'], time: number, now: number) {
+    const gl = this.gl, trace = this.trace;
+    if (!surface.sourceId) return false;
+    const source = scene.sources.find(s => s.id === surface.sourceId); if (!source) return false;
+    const sourceKind = source.kind === 'gradient' ? 1 : source.kind === 'grid' ? 2 : 0;
+    gl.bindTexture(gl.TEXTURE_2D, this.fallback);
+    if (sourceKind === 0) {
+      const entry = this.media.entries.get(source.id); if (!entry || entry.error) return false;
+      this.media.updateClock(entry, source, time);
+      const element = entry.element;
+      if (element instanceof HTMLVideoElement && element.readyState < 2) return false;
+      if (element instanceof HTMLImageElement && (!element.complete || !element.naturalWidth)) return false;
+      let texture = this.textures.get(source.id);
+      if (!texture) {
+        texture = { key: entry.key, texture: gl.createTexture()! }; this.textures.set(source.id, texture); gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); entry.dirty = true;
+      }
+      gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+      if (entry.dirty) {
+        try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, element); entry.dirty = false; }
+        catch (e) { entry.error = `GPU texture upload failed: ${e instanceof Error ? e.message : String(e)}`; return false; }
+        if (trace && entry.meta && trace.uploads.length < traceLimit) trace.uploads.push({ source: source.id, now, mediaTime: entry.meta.mediaTime, age: now - entry.meta.presentationTime });
+      }
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,1,2,0,2,3].flatMap(i => corners[i])), gl.DYNAMIC_DRAW);
+    gl.uniformMatrix3fv(this.uniform('inverseMap'), false, map);
+    gl.uniform4fv(this.uniform('crop'), surface.crop); gl.uniform1f(this.uniform('opacity'), surface.opacity);
+    gl.uniform1f(this.uniform('brightness'), surface.brightness); gl.uniform1f(this.uniform('saturation'), surface.saturation);
+    gl.uniform1f(this.uniform('time'), time * source.speed); gl.uniform1i(this.uniform('kind'), sourceKind); gl.uniform1i(this.uniform('mask'), surface.mask === 'ellipse' ? 1 : 0);
+    gl.uniform3fv(this.uniform('color'), [1,3,5].map(i => parseInt(source.color.slice(i, i+2),16)/255)); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    return true;
+  }
+  private stillKey(scene: Scene, surface: Scene['surfaces'][number]) {
+    const source = scene.sources.find(s => s.id === surface.sourceId), entry = source && this.media.entries.get(source.id);
+    return source?.kind === 'image' && entry && !entry.error ? JSON.stringify([entry.generation, entry.dirty, surface.crop, surface.brightness, surface.saturation]) : null;
+  }
   /** Bounded measurements: the last 600 frame intervals, never per-frame IPC. */
-  probe(): RendererProbe { return { frames: this.total, slowFrames: this.slow, maxIntervalMs: this.maxInterval, intervals: [...this.intervals], media: this.media.probe() }; }
+  probe(): RendererProbe { return { frames: this.total, slowFrames: this.slow, maxIntervalMs: this.maxInterval, intervals: [...this.intervals], media: this.media.probe(), ambient: this.ambient.probe(performance.now()) }; }
   /** Start recording a bounded timing trace (opt-in; used for profiling and qualification). */
   startTrace() { const start = performance.now(); this.trace = { start, end: start, raf: [], frames: [], uploads: [], quality: [], events: [] }; this.media.trace = this.trace; this.lastQuality = 0; }
   stopTrace() { const trace = this.trace; if (trace) trace.end = performance.now(); this.trace = null; this.media.trace = null; return trace; }
-  dispose() { cancelAnimationFrame(this.frame); this.media.dispose(); this.textures.forEach(t => this.gl.deleteTexture(t.texture)); this.gl.deleteTexture(this.fallback); this.gl.deleteBuffer(this.buffer); this.gl.deleteProgram(this.program); }
+  dispose() { cancelAnimationFrame(this.frame); this.ambient.dispose(); this.media.dispose(); this.textures.forEach(t => this.gl.deleteTexture(t.texture)); this.gl.deleteTexture(this.fallback); this.gl.deleteBuffer(this.buffer); this.gl.deleteProgram(this.program); }
 }

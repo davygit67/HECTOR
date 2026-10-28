@@ -1,22 +1,37 @@
 import { z } from 'zod';
+import { BACKLIGHT_DEFAULTS, BACKLIGHT_LIMITS, BACKLIGHT_TONE_PROFILES } from '../ambient/backlight';
+import { youtubeIdSchema } from './youtube';
 
 const number = z.number().finite();
 export const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);
 const point = z.tuple([number.min(-2).max(3), number.min(-2).max(3)]);
 export const sourceSchema = z.object({
-  id: idSchema, name: z.string().min(1).max(160), kind: z.enum(['image', 'video', 'gradient', 'grid', 'clock', 'capture']),
+  id: idSchema, name: z.string().min(1).max(160), kind: z.enum(['image', 'video', 'gradient', 'grid', 'clock', 'capture', 'youtube']),
   /** Local file grant (image/video). */
   assetId: idSchema.optional(),
   /** Live screen/window grant (capture). Grants are session-only; a restored capture must be reconnected. */
-  captureId: idSchema.optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  captureId: idSchema.optional(),
+  /** YouTube video played by the official embedded player (youtube); `start` is the offset in seconds. */
+  videoId: youtubeIdSchema.optional(), start: z.number().int().min(0).max(86400).optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   loop: z.boolean(), speed: number.min(0.1).max(4), volume: number.min(0).max(1)
 }).strict();
+const limit = (key: keyof typeof BACKLIGHT_LIMITS) => number.min(BACKLIGHT_LIMITS[key].min).max(BACKLIGHT_LIMITS[key].max);
+/** Ambient backlight around a surface, lit by the colors at its source's edges. Limits follow the backlight implementation. */
+export const ambientSchema = z.object({
+  enabled: z.boolean(), intensity: limit('intensity'), spread: limit('spread'), smoothingMs: z.number().int().min(0).max(1000),
+  toneProfile: z.enum(BACKLIGHT_TONE_PROFILES), opacity: limit('opacity'), vibrance: limit('vibrance')
+}).strict();
+export type Ambient = z.infer<typeof ambientSchema>;
+export const ambientDefaults: Ambient = { enabled: false, intensity: BACKLIGHT_DEFAULTS.intensity, spread: BACKLIGHT_DEFAULTS.spread, smoothingMs: BACKLIGHT_DEFAULTS.smoothingMs,
+  toneProfile: BACKLIGHT_DEFAULTS.toneProfile!, opacity: BACKLIGHT_DEFAULTS.opacity!, vibrance: BACKLIGHT_DEFAULTS.vibrance! };
 const surfaceFields = z.object({
   id: idSchema, name: z.string().min(1).max(160), sourceId: idSchema.nullable(),
   corners: z.tuple([point, point, point, point]), visible: z.boolean(), locked: z.boolean(),
   opacity: number.min(0).max(1), brightness: number.min(0).max(2), saturation: number.min(0).max(2),
   crop: z.tuple([number.min(0).max(0.95), number.min(0).max(0.95), number.min(0).max(0.95), number.min(0).max(0.95)]),
-  mask: z.enum(['none', 'ellipse']), group: z.string().max(80)
+  mask: z.enum(['none', 'ellipse']), group: z.string().max(80),
+  /** Absent in projects saved before ambient backlight existed; treated as off. */
+  ambient: ambientSchema.optional()
 }).strict();
 export const surfaceSchema = surfaceFields.superRefine((s, ctx) => {
   if (s.crop[0] + s.crop[2] >= 0.99 || s.crop[1] + s.crop[3] >= 0.99) ctx.addIssue({ code: 'custom', message: 'Crop must leave a visible image.' });
@@ -36,6 +51,8 @@ export const sceneSchema = z.object({
   for (const source of s.sources) {
     if (['image', 'video'].includes(source.kind) && !source.assetId) ctx.addIssue({ code: 'custom', message: 'Local media requires an asset.' });
     if (source.kind === 'capture' && !source.captureId) ctx.addIssue({ code: 'custom', message: 'Capture requires a capture grant.' });
+    if (source.kind === 'youtube' && !source.videoId) ctx.addIssue({ code: 'custom', message: 'YouTube sources require a video ID.' });
+    if (source.kind !== 'youtube' && (source.videoId !== undefined || source.start !== undefined)) ctx.addIssue({ code: 'custom', message: 'Only YouTube sources have a video ID.' });
   }
 });
 export type Scene = z.infer<typeof sceneSchema>;
