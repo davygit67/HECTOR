@@ -34,6 +34,8 @@ Sign in to [Platform tunnel settings](https://platform.openai.com/settings/organ
 
 The operator needs **Tunnels Read + Manage** to create/edit and **Read + Use** to run or select the tunnel. Custom MCP access in ChatGPT is a separate workspace permission. If the page reports an access restriction, resolve that account permission before continuing; a tunnel ID does not bypass it.
 
+For the personal prototype, check the actual signed-in email in both products before creating the tunnel. The same display name can belong to two different accounts, and signing into Safari does not change the in-app browser's account. If ChatGPT reports that the server denied access, compare the accounts, organization/workspace association and Read + Use permission before changing MCP authentication or creating another tunnel. The local canvas agent's model API key can remain separate; only the tunnel runtime credential must be authorized for the chosen tunnel.
+
 Create or select a runtime API key with Tunnels Read + Use. Enter it locally as `CONTROL_PLANE_API_KEY` through a secure secret input or your environment manager. Do not put a literal key in a command argument, task prompt, chat, committed file or screenshot. Do not give the long-running client an admin key. Do not assume the existing model API key has the required tunnel permissions.
 
 ## 3. Run the official tunnel client
