@@ -86,9 +86,16 @@ export class Hector {
   }
   /** Average RGB around normalized points of a window's projection canvas, from a real screenshot. */
   async pixels(page: Page, points: Point[]): Promise<Rgb[]> {
-    const png = await page.locator('canvas.projection').screenshot();
-    return this.app.evaluate(({ nativeImage }, { data, points }) => {
-      const image = nativeImage.createFromBuffer(Buffer.from(data, 'base64')).resize({ width: 480 });
+    const canvas = page.locator('canvas.projection');
+    await canvas.scrollIntoViewIfNeeded();
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error('Projection canvas is not visible.');
+    const rect = { x: Math.floor(bounds.x), y: Math.floor(bounds.y), width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) };
+    // Capture the composited Electron page directly. Chromium's DevTools screenshot path can stall on
+    // continuously animated WebGL canvases on Windows even while the renderer and ambient worker are healthy.
+    const window = await this.app.browserWindow(page);
+    return window.evaluate(async (window, { rect, points }) => {
+      const image = (await window.webContents.capturePage(rect)).resize({ width: 480 });
       const { width, height } = image.getSize(), bitmap = image.toBitmap();
       return points.map(([x, y]) => {
         const px = Math.min(width - 2, Math.max(1, Math.round(x * (width - 1)))), py = Math.min(height - 2, Math.max(1, Math.round(y * (height - 1))));
@@ -96,7 +103,7 @@ export class Hector {
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = ((py + dy) * width + px + dx) * 4; b += bitmap[i]; g += bitmap[i + 1]; r += bitmap[i + 2]; }
         return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)] as [number, number, number];
       });
-    }, { data: png.toString('base64'), points });
+    }, { rect, points });
   }
 }
 
@@ -106,3 +113,4 @@ export function expectColors(actual: Rgb[], expected: Rgb[], tolerance = 40) {
   const describe = (list: Rgb[]) => list.map(c => `(${c.join(',')})`).join(' ');
   expect(actual.every((c, i) => near(c, expected[i], tolerance)), `pixels ${describe(actual)} vs expected ${describe(expected)}`).toBe(true);
 }
+

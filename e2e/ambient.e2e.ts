@@ -31,7 +31,10 @@ async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeo
       return pixels.some(c => !dark(c));
     }, { timeout }).toBe(true);
   } catch (cause) {
-    const probe = await page.evaluate(() => window.hectorProbe?.snapshot());
+    const probe = await page.evaluate(() => {
+      const snapshot = window.hectorProbe?.snapshot();
+      return snapshot && { frames: snapshot.frames, ambient: snapshot.ambient };
+    });
     throw new Error(`Generator glow missing: ${JSON.stringify({ points, pixels, probe, errors: h.errors })}`, { cause });
   }
 }
