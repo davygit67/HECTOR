@@ -86,7 +86,26 @@ export class Hector {
     return (await this.draft()).sources.filter(s => !before.has(s.id));
   }
   /** Average RGB around normalized points of a window's projection canvas, from a real screenshot. */
-  async pixels(page: Page, points: Point[]): Promise<Rgb[]> {
+  async pixels(page: Page, points: Point[], animated = false): Promise<Rgb[]> {
+    this.pixelCaptureStage = 'screenshot';
+    const png = animated ? await this.animatedCanvas(page) : await page.locator('canvas.projection').screenshot();
+    this.pixelCaptureStage = 'pixels';
+    const pixels = await this.app.evaluate(({ nativeImage }, { data, points }) => {
+      const image = nativeImage.createFromBuffer(Buffer.from(data, 'base64')).resize({ width: 480 });
+      const { width, height } = image.getSize(), bitmap = image.toBitmap();
+      return points.map(([x, y]) => {
+        const px = Math.min(width - 2, Math.max(1, Math.round(x * (width - 1)))), py = Math.min(height - 2, Math.max(1, Math.round(y * (height - 1))));
+        let r = 0, g = 0, b = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = ((py + dy) * width + px + dx) * 4; b += bitmap[i]; g += bitmap[i + 1]; r += bitmap[i + 2]; }
+        return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)] as [number, number, number];
+      });
+    }, { data: png.toString('base64'), points });
+    this.pixelCaptureStage = 'complete';
+    return pixels;
+  }
+  /** Capture a continuously animated canvas without waiting for Playwright's element stability check.
+   * Callers must poll the expected pixels because capture can precede the next rendered frame. */
+  private async animatedCanvas(page: Page): Promise<Buffer> {
     const canvas = page.locator('canvas.projection');
     this.pixelCaptureStage = 'bounds';
     // Playwright's scrollIntoViewIfNeeded (also used by locator.screenshot) can wait indefinitely
@@ -102,19 +121,10 @@ export class Hector {
     this.pixelCaptureStage = 'window';
     const window = await this.app.browserWindow(page);
     this.pixelCaptureStage = 'capture';
-    const result = await window.evaluate(async (window, { rect, points }) => {
-      const image = (await window.webContents.capturePage(rect)).resize({ width: 480 });
-      const { width, height } = image.getSize(), bitmap = image.toBitmap();
-      return points.map(([x, y]) => {
-        const px = Math.min(width - 2, Math.max(1, Math.round(x * (width - 1)))), py = Math.min(height - 2, Math.max(1, Math.round(y * (height - 1))));
-        let r = 0, g = 0, b = 0;
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = ((py + dy) * width + px + dx) * 4; b += bitmap[i]; g += bitmap[i + 1]; r += bitmap[i + 2]; }
-        return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)] as [number, number, number];
-      });
-    }, { rect, points });
-    this.pixelCaptureStage = 'complete';
-    await window.dispose();
-    return result;
+    try {
+      const data = await window.evaluate(async (window, rect) => (await window.webContents.capturePage(rect)).toPNG().toString('base64'), rect);
+      return Buffer.from(data, 'base64');
+    } finally { await window.dispose(); }
   }
 }
 

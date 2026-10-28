@@ -27,7 +27,7 @@ async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeo
   let pixels: Rgb[] = [];
   try {
     await expect.poll(async () => {
-      pixels = await h.pixels(page, points);
+      pixels = await h.pixels(page, points, true);
       return pixels.some(c => c.some(v => v > 12));
     }, { timeout }).toBe(true);
   } catch (cause) {

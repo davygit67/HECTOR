@@ -8,7 +8,7 @@ This document records what has been verified, on which platform and how. Windows
 - `npm run smoke`: Playwright drives the built app in real Electron windows.
   - Media fixtures are generated at run time: constant-frame-rate VP8 WebM via WebCodecs, and PNGs.
   - Native file dialogs are stubbed in main. Everything else is real: IPC, decoding, GPU compositing, OS capture.
-  - Pixels are sampled from Electron's native composited screenshots, clipped to the measured projection canvas. This avoids Playwright's automatic scroll/stability wait, which stalled on animated output on the Windows runner while the renderer and ambient worker continued producing frames.
+  - Pixels are sampled from screenshots of the projection canvas. The continuously animated generator test uses Electron's native composited capture with pixel polling, avoiding Playwright's automatic scroll/stability wait, which stalled on Windows while the renderer and ambient worker continued producing frames. Other tests retain Playwright's standard screenshot capture.
 
 | Area (spec) | What is exercised | Windows 11 | macOS |
 |---|---|---|---|
