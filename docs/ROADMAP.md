@@ -20,6 +20,7 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Now: close out M1 (basic mapper) and capture
 
+- Check the studio design system on macOS: type fallback, native select/range/color styling and the 1024×650 minimum layout. Windows is screenshot-reviewed.
 - Validate the studio Live view toggle on Windows/macOS: preview resources release while output continues, and preview resumes after repeated toggles. Desktop CI and manual qualification remain pending.
 
 - Re-run Windows/macOS CI to validate the loop-safe staging playback assertions; local Linux checks pass, desktop qualification still needs a supported display.

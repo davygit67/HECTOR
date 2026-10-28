@@ -8,6 +8,7 @@ HECTOR is an Electron desktop app with two renderer windows (Studio and Output) 
 |---|---|---|
 | Desktop lifecycle, displays, files, permissions, IPC | `electron/main.ts`, `electron/preload.ts`, `electron/persistence.ts`, `electron/output-policy.ts`, `electron/media-protocol.ts` | Windows, display selection, blackout, transport clock, file and capture grants, disk I/O, media serving |
 | Studio interface | `src/main.tsx`, `src/style.css` | Selection, panels, drag gestures, dialogs. It never renders frames |
+| Design system | `src/ui/system.css`, `src/ui/kit.tsx` | Tokens (palette, type, spacing, motion) and the shared controls every studio screen composes: keys, fields, tabs, segmented selectors, switches, lamps, sliders, sections, banners, dialogs. `style.css` only lays them out. Sliders commit once per gesture, never per pointer move |
 | Scene model, validation, commands, undo/redo | `src/core/model.ts`, `src/core/session.ts` | Zod schemas, `reduceScene`, the `SceneSession` draft/applied/saved authority |
 | Media and playback | `src/media/registry.ts` | One stable element per source per renderer, decoder lifetime, transport sync |
 | GPU rendering | `src/render/renderer.ts`, `src/render/geometry.ts` | WebGL program, projective warp, compositing, textures, frame measurements |

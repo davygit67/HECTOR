@@ -14,7 +14,7 @@ test('window capture is staged, projected, cropped, kept alive for output, and r
     });
     const page = h.studio;
     await page.getByRole('button', { name: 'Media', exact: true }).click();
-    await page.getByRole('button', { name: '＋ Screen / window capture' }).click();
+    await page.getByRole('button', { name: 'Add Screen / window capture' }).click();
     const picker = page.getByRole('dialog', { name: 'Capture a screen or window' });
     await picker.getByRole('button', { name: 'Windows', exact: true }).click();
     await expect(picker.getByRole('button', { name: 'Capture HECTOR capture fixture' })).toBeVisible();

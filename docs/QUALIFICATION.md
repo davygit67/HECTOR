@@ -22,6 +22,8 @@ This document records what has been verified, on which platform and how. Windows
 
 Windows environment (2026-10-27): Windows 11 Home 10.0.26200, Node 24.14.0, Electron 45.0.0, one built-in 120 Hz display at 1646×1029 logical. No projector or second display. Result: 18 unit tests and 15 end-to-end tests pass.
 
+Studio redesign (`feat/rams-design-system`, 2026-10-28), same Windows machine: 18 unit tests and 16 end-to-end tests pass, capture included. Every studio screen and dialog was screenshotted at 1440×900 and at the 1024×650 minimum and reviewed by eye. macOS rendering (Helvetica Neue fallback, native select and range styling) has not been checked.
+
 CI (`.github/workflows/ci.yml`) runs check, smoke and unsigned `dist` on `windows-latest` and `macos-latest` and uploads the installers. **It has never run**, because the branch has not been pushed yet. A green CI run would show the suites work on hosted runners; it would not qualify projectors, real displays or interactive macOS behavior.
 
 ## Local video pacing (`npm run measure`)

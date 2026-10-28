@@ -1,0 +1,144 @@
+/* HECTOR design system. Tokens and primitives shared by every studio screen; layout lives in style.css.
+   Signal orange marks selection, active state and the one commit action. Green marks healthy status only. */
+:root {
+  --ivory: #f2f0e9; --paper: #f8f7f2; --field: #fcfbf8; --well: #e8e6de; --screen: #161615;
+  --ink: #222220; --ink-2: #4a4944; --ink-3: #6a6862; --ink-4: #a3a198;
+  --line: #c9c7be; --line-soft: #dedcd3;
+  --signal: #f36b21; --signal-press: #e25d15; --signal-ink: #b4440c; --signal-wash: #fbe8dc; --ok: #5e9a6a;
+  --font: "Inter", "Helvetica Neue", Helvetica, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --radius: 3px; --control: 30px; --ease: cubic-bezier(.2, 0, 0, 1); --quick: 120ms;
+  font: 400 13px/1.45 var(--font); color: var(--ink); background: var(--ivory);
+  color-scheme: light; font-synthesis: none; -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ivory); }
+button, input, select { font: inherit; color: inherit; }
+b { font-weight: 600; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+::selection { background: var(--signal-wash); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid var(--ivory); }
+::-webkit-scrollbar-track { background: transparent; }
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Type */
+.label { font-size: 10px; line-height: 1.2; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.note { margin: 0; font-size: 11.5px; line-height: 1.65; color: var(--ink-3); }
+.tag { font-size: 10px; letter-spacing: .08em; color: var(--ink-3); border: 1px solid var(--line); border-radius: 2px; padding: 2px 6px; text-transform: uppercase; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Keys */
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--control); padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; cursor: pointer; transition: border-color var(--quick) var(--ease), background-color var(--quick) var(--ease), color var(--quick) var(--ease);
+}
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:active:not(:disabled) { background: var(--well); }
+button:disabled { color: var(--ink-4); border-color: var(--line-soft); background: transparent; cursor: not-allowed; }
+button.primary { background: var(--signal); border-color: var(--signal); color: var(--ink); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--signal-press); border-color: var(--signal-press); }
+button.primary:disabled { background: var(--well); border-color: var(--well); color: var(--ink-4); }
+button.quiet, button.danger { border-color: transparent; background: transparent; color: var(--ink-2); }
+button.quiet:hover:not(:disabled) { border-color: transparent; background: var(--well); color: var(--ink); }
+button.danger { padding: 0; }
+button.danger:hover:not(:disabled) { border-color: transparent; color: var(--signal-ink); }
+button.icon { width: var(--control); padding: 0; }
+button.wide { width: 100%; }
+button[aria-pressed=true].key { border-color: var(--signal); color: var(--signal-ink); }
+.glyph { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Fields */
+input, select { height: var(--control); min-width: 0; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); font-size: 12.5px; font-variant-numeric: tabular-nums; transition: border-color var(--quick) var(--ease); }
+input:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--ink-4); }
+input:focus, select:focus { border-color: var(--signal); outline: none; }
+input:focus-visible, select:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--signal); }
+input:disabled, select:disabled { color: var(--ink-4); background: transparent; border-color: var(--line-soft); }
+input::placeholder { color: var(--ink-4); }
+input[type=number] { appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { appearance: none; margin: 0; }
+select { appearance: none; padding-right: 26px; cursor: pointer; background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236a6862' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 9px center; }
+input[type=color] { width: 44px; padding: 3px; cursor: pointer; }
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 60%); align-items: center; gap: var(--s3); margin: 0 0 var(--s2); font-size: 12px; color: var(--ink-2); }
+.field input, .field select { width: 100%; }
+.field.stacked { grid-template-columns: 1fr; gap: 6px; }
+
+/* Tabs: one pattern for the library, inspector and capture picker */
+.tabs { display: flex; gap: var(--s5); padding: 0 var(--s4); border-bottom: 1px solid var(--line); flex: none; }
+.tabs button { height: 42px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); box-shadow: inset 0 -2px 0 transparent; }
+.tabs button:hover:not(:disabled) { color: var(--ink); }
+.tabs button:active:not(:disabled) { background: none; }
+.tabs button[aria-pressed=true] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--signal); }
+
+/* Segmented selector: a row of radio keys, one lit */
+.segmented { display: inline-flex; height: var(--control); border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); overflow: hidden; flex: none; }
+.segment { position: relative; display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--line); font-size: 12px; color: var(--ink-2); white-space: nowrap; cursor: pointer; transition: background-color var(--quick) var(--ease), color var(--quick) var(--ease); }
+.segment:first-child { border-left: 0; }
+.segment input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.segment:hover { color: var(--ink); background: var(--well); }
+.segment:has(input:checked) { background: var(--signal); color: var(--ink); font-weight: 600; }
+.segment:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: -3px; }
+.segment:has(input:disabled) { color: var(--ink-4); background: transparent; cursor: not-allowed; }
+.segment:has(input:disabled:checked) { background: var(--well); }
+.segmented.small { height: 24px; }
+.segmented.small .segment { padding: 0 9px; font-size: 11px; }
+
+/* Switch: a lit track for on/off state, as a button (aria-pressed) or a checkbox */
+.switch { display: inline-flex; align-items: center; gap: 8px; height: var(--control); padding: 0 8px; border: 0; background: transparent; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+button.switch:hover:not(:disabled) { color: var(--ink); background: transparent; }
+.switch-track { position: relative; flex: none; width: 26px; height: 14px; border: 1px solid var(--ink-3); border-radius: 7px; transition: background-color var(--quick) var(--ease), border-color var(--quick) var(--ease); }
+.switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); transition: transform var(--quick) var(--ease), background-color var(--quick) var(--ease); }
+.switch[aria-pressed=true] .switch-track, .switch input:checked + .switch-track { background: var(--signal); border-color: var(--signal); }
+.switch[aria-pressed=true] .switch-track::after, .switch input:checked + .switch-track::after { transform: translateX(12px); background: var(--paper); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--signal); outline-offset: 2px; }
+.switch:has(input:disabled) { color: var(--ink-4); cursor: not-allowed; }
+
+/* Lamp: a discrete status indicator */
+.lamp { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.lamp::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--ink-4); }
+.lamp.ok::before { background: var(--ok); border-color: var(--ok); }
+.lamp.signal::before { background: var(--signal); border-color: var(--signal); }
+
+/* Slider: label, large readout, lit track, scale marks */
+.slider { margin: 0 0 var(--s4); }
+.slider-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s2); }
+.slider-value { display: flex; align-items: baseline; gap: 2px; color: var(--ink); }
+.slider-value input { width: 64px; height: 30px; padding: 0 2px; border-color: transparent; background: transparent; text-align: right; font-size: 22px; font-weight: 300; letter-spacing: -.01em; }
+.slider-value small { font-size: 11px; color: var(--ink-3); min-width: 10px; }
+.slider input[type=range] { display: block; width: 100%; height: 20px; margin: 4px 0 2px; padding: 0; border: 0; background: transparent; appearance: none; cursor: pointer; }
+.slider input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--signal) var(--fill), var(--line) var(--fill)); }
+.slider input[type=range]::-webkit-slider-thumb { appearance: none; width: 6px; height: 18px; margin-top: -7px; border-radius: 1px; background: var(--ink); }
+.slider input[type=range]:focus-visible { box-shadow: none; }
+.slider input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--signal); outline-offset: 2px; }
+.slider input[type=range]:disabled { cursor: not-allowed; }
+.slider input[type=range]:disabled::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--ink-4) var(--fill), var(--line-soft) var(--fill)); }
+.slider input[type=range]:disabled::-webkit-slider-thumb { background: var(--ink-4); }
+.slider-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* Section: a labelled group inside a panel */
+.section + .section { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft); }
+.section-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; margin-bottom: var(--s3); }
+.section-head .count { margin-left: 8px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Card */
+.card { background: var(--paper); border: 1px solid var(--line-soft); border-radius: var(--radius); transition: border-color var(--quick) var(--ease); }
+.card.selected { border-color: var(--signal); }
+
+/* Banner: messages that need the operator's attention */
+.banner { display: flex; align-items: center; gap: var(--s3); min-height: 38px; max-height: 100px; overflow: auto; padding: 6px var(--s5); background: var(--signal-wash); border-bottom: 1px solid var(--line); font-size: 12px; flex: none; }
+.banner::before { content: ''; flex: none; width: 8px; height: 8px; background: var(--signal); }
+.banner > span { flex: 1; }
+.banner button { height: 24px; }
+
+/* Dialog */
+.backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(34, 34, 32, .32); animation: appear var(--quick) var(--ease); }
+.modal { width: min(520px, 92vw); padding: var(--s5); background: var(--ivory); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 16px 48px rgba(34, 34, 32, .16); }
+.modal h2 { margin: 0 0 var(--s2); font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
+.modal p { margin: 0 0 var(--s3); color: var(--ink-2); line-height: 1.6; }
+.modal .actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s5); }
+.warning { color: var(--signal-ink); }
+@keyframes appear { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

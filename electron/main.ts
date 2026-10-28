@@ -77,7 +77,7 @@ function authorize(event: IpcMainInvokeEvent | IpcMainEvent, write = false) {
 }
 function createWindow(isOutput: boolean) {
   const window = new BrowserWindow({ title: isOutput ? 'HECTOR Output' : 'HECTOR Studio', width: isOutput ? 960 : 1440, height: isOutput ? 540 : 900,
-    minWidth: isOutput ? 320 : 1024, minHeight: isOutput ? 240 : 650, show: false, backgroundColor: '#090a0e', autoHideMenuBar: true,
+    minWidth: isOutput ? 320 : 1024, minHeight: isOutput ? 240 : 650, show: false, backgroundColor: isOutput ? '#000000' : '#f2f0e9', autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, webSecurity: true,
       autoplayPolicy: 'no-user-gesture-required' } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

@@ -24,7 +24,7 @@ test('studio and content-only output windows are secure and stable', async () =>
     expect((await output.evaluate(() => window.hector!.armCapture('not-a-grant'))).ok).toBe(false);
     // Panels, selection and the AI drawer never recreate output.
     for (const name of ['AI assistant', 'Media', 'Setups', 'Layers', 'Crop', 'Effects', 'Transform', 'AI assistant']) await h.studio.getByRole('button', { name, exact: true }).click();
-    await h.studio.getByRole('button', { name: 'Hide inspector' }).click(); await h.studio.getByRole('button', { name: 'Inspector ‹' }).click();
+    for (const panel of ['Inspector', 'Inspector', 'Library', 'Library']) await h.studio.getByRole('button', { name: panel, exact: true }).click();
     expect(await h.outputWindowId()).toBe(id);
     h.expectNoErrors();
   } finally { await h.close(); }
