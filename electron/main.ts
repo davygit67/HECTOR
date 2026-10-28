@@ -11,6 +11,8 @@ import { createCanvasRpc } from '../host/canvas-rpc.js';
 import { reduceBatch } from '../src/shared/studioScene.js';
 import type { MemoryRequest, StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio.js';
 import type { MappingObservation } from '../src/shared/mappingWorkshop.js';
+import { createCloudReceiver, localCloudReceiverLoader } from '../host/cloud-receiver.js';
+import type { CloudRelayAction } from '../src/shared/cloudRelay.js';
 import { startStaticPreview } from '../host/static-preview.js';
 import { LocalAssets } from '../host/local-assets.js';
 import { isChatCommand } from '../src/shared/chat.js';
@@ -96,6 +98,15 @@ const chat = createChatController({
 }, localAgentFactory(root, dataDir), value => {
   if (control && !control.isDestroyed()) control.webContents.send('chat:state', value);
 });
+const cloud = createCloudReceiver(localCloudReceiverLoader(root), dataDir);
+let releaseCloudTarget: (() => void) | undefined;
+function registerCloudTarget() {
+  releaseCloudTarget?.();
+  releaseCloudTarget = cloud.register('desktop-studio', {
+    ready: () => !!control && !control.isDestroyed() && !control.webContents.isLoadingMainFrame() && chat.currentState().ready && !chat.currentState().busy,
+    deliver: prompt => chat.send(prompt, 'cloud'), cancel: () => chat.cancel(),
+  });
+}
 function authorizeChat(event: IpcMainInvokeEvent) {
   authorize(event);
   if (event.sender !== control?.webContents) throw new Error('Use chat in the control window.');
@@ -185,6 +196,7 @@ else {
     });
     ipcMain.on('studio:reply', (event, reply) => { if (event.sender === control?.webContents && event.senderFrame === event.sender.mainFrame) studioRpc.receive(reply); });
     ipcMain.handle('chat:memory', (event, request: MemoryRequest) => { authorizeChat(event); return chat.memory(request); });
+    ipcMain.handle('chat:relay', (event, action: CloudRelayAction) => { authorizeChat(event); return cloud.request('desktop-studio', action); });
     ipcMain.handle('chat:get', event => { authorizeChat(event); return chat.getState(); });
     ipcMain.handle('chat:send', (event, prompt: string) => { authorizeChat(event); return chat.send(prompt); });
     ipcMain.handle('chat:cancel', event => { authorizeChat(event); chat.cancel(); });
@@ -204,9 +216,11 @@ else {
       minWidth: 940, minHeight: 680, backgroundColor: '#f5f4ef', show: false,
       webPreferences: { preload: join(root, 'electron/preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     secure(control);
+    control.webContents.on('did-start-loading', () => { releaseCloudTarget?.(); releaseCloudTarget = undefined; });
+    control.webContents.on('did-finish-load', registerCloudTarget);
     control.loadURL(assets.origin + '/');
     control.once('ready-to-show', () => { control?.show(); control?.focus(); });
-    control.on('closed', () => { control = null; if (!quitting) app.quit(); });
+    control.on('closed', () => { releaseCloudTarget?.(); releaseCloudTarget = undefined; control = null; if (!quitting) app.quit(); });
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'Projection Mapper', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
       { role: 'editMenu' },
@@ -224,6 +238,14 @@ else {
     };
     screen.on('display-added', displaysChanged); screen.on('display-removed', displaysChanged); screen.on('display-metrics-changed', displaysChanged);
   }).catch(error => { console.error('Could not open Projection Mapper:', error); app.quit(); });
-  app.on('before-quit', () => { quitting = true; media?.dispose(); assets?.close(); chat.dispose(); if (saveTimer) save(); });
+  let quitCleanup: Promise<void> | undefined;
+  let quitCleanupDone = false;
+  app.on('before-quit', event => {
+    if (quitCleanupDone) return;
+    event.preventDefault(); if (quitCleanup) return; quitting = true;
+    media?.dispose(); assets?.close(); chat.dispose(); if (saveTimer) save();
+    // Finish a cancelled delivery receipt and release its process lock on normal exit.
+    quitCleanup = cloud.dispose().finally(() => { quitCleanupDone = true; app.quit(); });
+  });
   app.on('window-all-closed', () => app.quit());
 }

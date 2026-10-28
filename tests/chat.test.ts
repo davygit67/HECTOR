@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createChatController, type AgentSession } from '../host/chat-controller';
+import { createChatController, type AgentSession, type AgentCanvas } from '../host/chat-controller';
 import { createCanvasRpc } from '../host/canvas-rpc';
 import { AGENT_COMMAND_TYPES } from '../agent/src/commands';
 import { CHAT_COMMAND_TYPES, isChatCommand, type CanvasRpc, type ChatState } from '../src/shared/chat';
@@ -109,4 +109,36 @@ test('a lost dispatch receipt cancels the turn and prevents SDK error recovery f
   await chat.send('Make a timer'); assert.equal(dispatches, 1); assert.equal(cancels, 1);
   assert.equal((await chat.getState()).messages.at(-1)?.status, 'cancelled');
   rpc.close(); chat.dispose();
+});
+test('chat exposes synchronous readiness/busy and exact safe outcomes for cloud delivery', async () => {
+  const r = room(); let calls = 0;
+  const chat = createChatController(r.port, async () => ({ busy: false, clear() {}, cancel() {}, async send() {
+    if (++calls === 2) throw new Error('provider credential details');
+    return { status: 'incomplete', text: 'A note was added; the requested movie remains unsupported.' };
+  } }), () => {});
+  assert.deepEqual(chat.currentState(), { ready: false, busy: false });
+  await chat.getState(); assert.deepEqual(chat.currentState(), { ready: true, busy: false });
+  const first = chat.send('Cloud request', 'cloud'); assert.equal(chat.currentState().busy, true);
+  assert.deepEqual(await first, { status: 'incomplete', text: 'A note was added; the requested movie remains unsupported.' });
+  const failure = await chat.send('Another request', 'cloud');
+  assert.equal(failure.status, 'incomplete'); assert.doesNotMatch(failure.text, /credential/);
+  chat.dispose(); assert.equal(chat.currentState().ready, false);
+});
+test('mapping observation forwards through the guarded agent port only during an active uncancelled turn', async () => {
+  const r = room(); let bound!: AgentCanvas, observed = 0;
+  const request = { surfaceId: 'tabletop' }, observation = { marker: 'paired camera and depth' };
+  const chat = createChatController({ ...r.port, studio: {
+    inspect: async () => ({} as never), observe: async () => ({} as never), execute: async () => ({} as never),
+    observeMapping: async value => { assert.deepEqual(value, request); observed++; return observation as never; },
+  } }, async port => {
+    bound = port;
+    return { busy: false, clear() {}, cancel() {}, async send() {
+      assert.equal(await port.studio!.observeMapping!(request as never), observation);
+      chat.cancel(); assert.throws(() => port.studio!.observeMapping!(request as never), /stopped/);
+      return { status: 'complete', text: 'Late success' };
+    } };
+  }, () => {});
+  await chat.getState(); assert.throws(() => bound.studio!.observeMapping!(request as never), /stopped/);
+  assert.equal((await chat.send('Inspect object')).status, 'cancelled'); assert.equal(observed, 1);
+  chat.dispose(); assert.throws(() => bound.studio!.observeMapping!(request as never), /stopped/);
 });

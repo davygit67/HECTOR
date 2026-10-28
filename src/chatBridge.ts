@@ -5,6 +5,7 @@ import { isChatCommand, type CanvasRpc, type ChatBridge, type ChatRequest, type 
 import { studioPort } from './studioRuntime';
 import { subscribeAdjustments } from './manualEvents';
 import type { MemoryRequest, MemoryState } from './shared/studio';
+import type { CloudRelayAction, CloudRelayState } from './shared/cloudRelay';
 
 declare global { interface Window { projectionChat?: ChatBridge; projectionStudio?: { subscribe(listener: (request: CanvasRpc) => void): () => void; reply(reply: { id: string; value?: unknown; error?: boolean }): void } } }
 export async function handleCanvasRpc(data: CanvasRpc): Promise<unknown> {
@@ -25,15 +26,15 @@ function browserChat(): ChatBridge {
   const isStudio = new URLSearchParams(location.search).get('view') !== 'output';
   let connected = !!hot && isStudio;
   const emit = (state: ChatState) => listeners.forEach(listener => listener(structuredClone(state)));
-  const request = <T,>(action: ChatRequest['action'], prompt?: string, memory?: MemoryRequest): Promise<T> => {
+  const request = <T,>(action: ChatRequest['action'], prompt?: string, memory?: MemoryRequest, relay?: CloudRelayAction): Promise<T> => {
     if (!hot || !isStudio) return Promise.reject(new Error('Open the local studio at http://127.0.0.1:5173/ or use the desktop app to chat.'));
     if (!connected) return Promise.reject(new Error(LOCAL_HOST_STOPPED));
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
-      const timer = setTimeout(() => { pending.delete(id); hot.send('pm:chat-request', { id: crypto.randomUUID(), action: 'cancel' });
+      const timer = setTimeout(() => { pending.delete(id); if(action === 'send') hot.send('pm:chat-request', { id: crypto.randomUUID(), action: 'cancel' });
         reject(new Error('The local host did not reply. Check the canvas before trying again.')); }, action === 'send' ? 135000 : 15000);
       pending.set(id, { resolve: value => resolve(value as T), reject, timer });
-      hot.send('pm:chat-request', { id, action, prompt, memory });
+      hot.send('pm:chat-request', { id, action, prompt, memory, relay });
     });
   };
   const response = (data: { id: string; value?: unknown; error?: string }) => {
@@ -83,6 +84,7 @@ function browserChat(): ChatBridge {
     send: prompt => request<void>('send', prompt),
     cancel: () => request<void>('cancel'), clear: () => request<void>('clear'),
     memory: memory => request<MemoryState>('memory', undefined, memory),
+    relay: action => request<CloudRelayState>('relay', undefined, undefined, action),
     subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
 }
 export const chatBridge = window.projectionChat ?? browserChat();

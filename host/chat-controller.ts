@@ -4,7 +4,7 @@ import { parseEnv } from 'node:util';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Bridge } from '../src/shared/bridge.js';
-import { CHAT_MESSAGE_LIMIT, type ChatState } from '../src/shared/chat.js';
+import { CHAT_MESSAGE_LIMIT, type ChatState, type ChatOutcome } from '../src/shared/chat.js';
 import type { AgentMemory, MemoryRequest, StudioPort } from '../src/shared/studio.js';
 export type AgentCanvas = Pick<Bridge, 'getSnapshot' | 'dispatch'> & { studio?: StudioPort };
 
@@ -14,13 +14,15 @@ export interface AgentSession {
   memory?: AgentMemory;
 }
 export type AgentFactory = (canvas: AgentCanvas) => Promise<AgentSession>;
+export function localAgentEnvironment(root:string): NodeJS.ProcessEnv {
+  try { return { ...(existsSync(join(root, 'agent/.env')) ? parseEnv(readFileSync(join(root, 'agent/.env'), 'utf8')) : {}), ...process.env }; }
+  catch { throw new Error('Check the local settings file at agent/.env, then reconnect.'); }
+}
 export function localAgentFactory(root: string, privateDirectory = join(root, '.local-data')): AgentFactory {
   return async canvas => {
     const bundle = join(root, 'agent/dist/index.js');
     if (!existsSync(bundle)) throw new Error('Build the agent package with npm --prefix agent run build, then reconnect.');
-    let env: NodeJS.ProcessEnv;
-    try { env = { ...(existsSync(join(root, 'agent/.env')) ? parseEnv(readFileSync(join(root, 'agent/.env'), 'utf8')) : {}), ...process.env }; }
-    catch { throw new Error('Check the local settings file at agent/.env, then reconnect.'); }
+    const env = localAgentEnvironment(root);
     if (!env.OPENAI_API_KEY?.trim() || env.OPENAI_API_KEY.trim() === 'replace-me') throw new Error('Set OPENAI_API_KEY in agent/.env, then reconnect. Keep your key out of chat.');
     // New conversations pick up a completed agent build without restarting video playback.
     const module = await import(pathToFileURL(bundle).href + '?build=' + statSync(bundle).mtimeMs);
@@ -46,6 +48,7 @@ export function createChatController(canvas: AgentCanvas, factory: AgentFactory,
     studio: canvas.studio && {
       inspect: () => { if (disposed || cancelled) throw new Error('Request stopped.'); return canvas.studio!.inspect(); },
       observe: request => { if (disposed || cancelled || !state.busy) throw new Error('Request stopped.'); return canvas.studio!.observe(request); },
+      ...(canvas.studio.observeMapping && { observeMapping: request => { if (disposed || cancelled || !state.busy) throw new Error('Request stopped.'); return canvas.studio!.observeMapping!(request); } }),
       execute: request => { if (disposed || cancelled || !state.busy) throw new Error('Request stopped.'); return canvas.studio!.execute(request); },
     },
     dispatch: command => {
@@ -71,13 +74,14 @@ export function createChatController(canvas: AgentCanvas, factory: AgentFactory,
     return loading;
   }
   return {
+    currentState() { return { ready: !disposed && state.ready, busy: state.busy }; },
     async getState() { try { await ensure(); } catch { /* State explains setup failure. */ } return snapshot(); },
-    async send(prompt: string) {
+    async send(prompt: string, source?: 'cloud'): Promise<ChatOutcome> {
       if (disposed) throw new Error('This conversation is disconnected.');
       if (state.busy) throw new Error('A request is already running.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > CHAT_MESSAGE_LIMIT) throw new Error('Use a message between 1 and 8000 characters.');
       cancelled = false; state.busy = true; state.progress = 'Thinking…'; const turn = ++generation;
-      state.messages.push({ id: randomUUID(), role: 'user', text: prompt.trim() }); trim(); broadcast();
+      state.messages.push({ id: randomUUID(), role: 'user', text: prompt.trim(), ...(source && { source }) }); trim(); broadcast();
       try {
         const session = await ensure();
         if (turn !== generation || disposed) throw new Error('Cancelled');
@@ -91,12 +95,14 @@ export function createChatController(canvas: AgentCanvas, factory: AgentFactory,
         } });
         if (turn !== generation) throw new Error('Cancelled');
         if (!disposed) state.messages.push({ id: randomUUID(), role: 'assistant', text: result.text, status: result.status });
+        return { status: result.status, text: result.text };
       } catch (error) {
+        const stopped = disposed || turn !== generation || (error as { code?: string })?.code === 'cancelled';
+        const result: ChatOutcome = { status: stopped ? 'cancelled' : 'incomplete', text: state.configurationError ?? (stopped ? 'Request stopped. Changes already applied remain on the canvas.' : 'The request failed. Check your connection and model settings. Changes already applied remain on the canvas.') };
         if (!disposed) {
-          const cancelled = turn !== generation || (error as { code?: string })?.code === 'cancelled';
-          state.messages.push({ id: randomUUID(), role: 'error', status: cancelled ? 'cancelled' : 'incomplete',
-            text: state.configurationError ?? (cancelled ? 'Request stopped. Changes already applied remain on the canvas.' : 'The request failed. Check your connection and model settings. Changes already applied remain on the canvas.') });
+          state.messages.push({ id: randomUUID(), role: 'error', ...result });
         }
+        return result;
       } finally { state.busy = false; state.progress = null; trim(); broadcast(); }
     },
     cancel() { if (state.busy) { generation++; cancelled = true; agent?.cancel(); state.progress = 'Stopping…'; broadcast(); } },

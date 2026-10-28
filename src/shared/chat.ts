@@ -1,6 +1,8 @@
 import type { Command } from './domain.js';
 import type { MemoryRequest, MemoryState, StudioRpc } from './studio.js';
-export interface ChatMessage { id: string; role: 'user' | 'assistant' | 'error'; text: string; status?: 'complete' | 'incomplete' | 'cancelled' }
+import type { CloudRelayAction, CloudRelayState } from './cloudRelay.js';
+export interface ChatMessage { id: string; role: 'user' | 'assistant' | 'error'; text: string; source?: 'cloud'; status?: 'complete' | 'incomplete' | 'cancelled' }
+export interface ChatOutcome { status: 'complete' | 'incomplete' | 'cancelled'; text: string }
 export interface ChatState { ready: boolean; busy: boolean; configurationError: string | null; progress: string | null; messages: ChatMessage[] }
 export interface ChatBridge {
   getState(): Promise<ChatState>;
@@ -9,9 +11,10 @@ export interface ChatBridge {
   cancel(): Promise<void>;
   clear(): Promise<void>;
   memory?(request: MemoryRequest): Promise<MemoryState>;
+  relay?(action: CloudRelayAction): Promise<CloudRelayState>;
   subscribe(listener: (state: ChatState) => void): () => void;
 }
-export type ChatRequest = { id: string; action: 'state' | 'send' | 'cancel' | 'clear' | 'memory'; prompt?: string; memory?: MemoryRequest };
+export type ChatRequest = { id: string; action: 'state' | 'send' | 'cancel' | 'clear' | 'memory' | 'relay'; prompt?: string; memory?: MemoryRequest; relay?: CloudRelayAction };
 export type CanvasRpc = { id: string; operation: 'snapshot' } | { id: string; operation: 'dispatch'; command: Command } | ({ id: string } & StudioRpc);
 export const CHAT_MESSAGE_LIMIT = 8000;
 /** Transport guard only. The imported SDK tools remain the source of orchestration. */

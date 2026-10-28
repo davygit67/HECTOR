@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatBridge } from './chatBridge';
 import { AssistantMemory } from './AssistantMemory';
+import { CloudInbox } from './CloudInbox';
 import { CHAT_MESSAGE_LIMIT, type ChatState } from './shared/chat';
 
 const DRAFT_KEY = 'projection-mapper.chat-draft';
@@ -43,7 +44,7 @@ export function ChatPanel() {
       {!state.messages.length && <div className="chat-welcome"><span>✦</span><p>Start with an idea. Then refine it together.</p>
         {['Put a rain sounds YouTube video on the wall with backlight.', 'Put a lemon pasta recipe on the wall.', 'Invent a glowing constellation game on the table where I connect stars by clicking them.'].map(prompt => <button key={prompt} disabled={busy} onClick={() => setDraft(prompt)}>{prompt}<span>↗</span></button>)}
       </div>}
-      {state.messages.map(message => <article className={'chat-message ' + message.role} key={message.id}><span className="chat-speaker">{message.role === 'user' ? 'YOU' : message.role === 'error' ? 'REQUEST UPDATE' : 'ASSISTANT'}</span><p>{message.text || 'The request ended without a text reply. Check the canvas for changes.'}</p>{message.status === 'incomplete' && <small>Request incomplete · applied changes remain on the canvas</small>}</article>)}
+      {state.messages.map(message => <article className={'chat-message ' + message.role} key={message.id}><span className="chat-speaker">{message.source === 'cloud' ? 'CLOUD REQUEST' : message.role === 'user' ? 'YOU' : message.role === 'error' ? 'REQUEST UPDATE' : 'ASSISTANT'}</span><p>{message.text || 'The request ended without a text reply. Check the canvas for changes.'}</p>{message.status === 'incomplete' && <small>Request incomplete · applied changes remain on the canvas</small>}</article>)}
       {busy && <div className="chat-progress" role="status"><i />{state.progress ?? 'Sending…'}</div>}
     </div>
     <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(); }}>
@@ -55,6 +56,7 @@ export function ChatPanel() {
       </div>
     </form>
     <p className="chat-footnote">Edits appear live. Clear conversation keeps your canvas. Room geometry is simulated.</p>
+    <CloudInbox relay={chatBridge.relay} />
     <AssistantMemory />
   </section>;
 }

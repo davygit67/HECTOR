@@ -5,6 +5,9 @@ import type { CommandReceipt, Snapshot } from '../src/shared/bridge';
 import type { ChatRequest } from '../src/shared/chat';
 import type { StudioSnapshot, StudioResult, StudioObservation } from '../src/shared/studio';
 import type { MappingObservation } from '../src/shared/mappingWorkshop';
+import { createCloudReceiver, localCloudReceiverLoader } from './cloud-receiver';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 
 /** Dev-only, private HMR messages. Keys and the SDK stay in the Node process. */
 export function projectionChat(): Plugin {
@@ -12,12 +15,14 @@ export function projectionChat(): Plugin {
     name: 'projection-local-chat', apply: 'serve',
     configureServer(server) {
       const origins = new WeakMap<WebSocketClient['socket'], string>();
-      type Connection = { controller: ReturnType<typeof createChatController>; rpc: ReturnType<typeof createCanvasRpc>; origin: string };
+      type Connection = { controller: ReturnType<typeof createChatController>; rpc: ReturnType<typeof createCanvasRpc>; origin: string; id:string; releaseCloud:()=>void };
       const sessions = new Map<WebSocketClient['socket'], Connection>();
       const busyOrigins = new Map<string, Connection>();
       const factory = localAgentFactory(server.config.root);
+      const cloud = createCloudReceiver(localCloudReceiverLoader(server.config.root), join(server.config.root, '.local-data'));
       const stop = (socket: WebSocketClient['socket']) => {
         const session = sessions.get(socket); if (!session) return;
+        session.releaseCloud();
         session.controller.dispose(); session.rpc.close(); sessions.delete(socket);
         if (busyOrigins.get(session.origin) === session) busyOrigins.delete(session.origin);
       };
@@ -47,7 +52,18 @@ export function projectionChat(): Plugin {
             observeMapping: request => rpc.request<MappingObservation>({ operation:'studio.observeMapping',request }),
           },
         }, factory, state => client.send('pm:chat-state', state));
-        sessions.set(client.socket, { controller, rpc, origin });
+        const session:Connection = { controller, rpc, origin, id:randomUUID(), releaseCloud:()=>{} };
+        session.releaseCloud = cloud.register(session.id, {
+          ready:()=>controller.currentState().ready && !controller.currentState().busy && !busyOrigins.has(origin),
+          deliver:async prompt=>{
+            if(busyOrigins.has(origin))throw new Error('A request is already running in this room.');
+            busyOrigins.set(origin, session);
+            try{return await controller.send(prompt, 'cloud');}
+            finally{if(busyOrigins.get(origin)===session)busyOrigins.delete(origin);}
+          },
+          cancel:()=>controller.cancel(),
+        });
+        sessions.set(client.socket, session);
       });
       server.ws.on('pm:canvas-reply', (data, client) => sessions.get(client.socket)?.rpc.receive(data));
       server.ws.on('pm:studio-dispose', (_data, client) => stop(client.socket));
@@ -58,6 +74,7 @@ export function projectionChat(): Plugin {
         if (!session) { reply(undefined, 'Reconnect the local studio to use chat.'); return; }
         try {
           if (data.action === 'state') reply(await session.controller.getState());
+          else if (data.action === 'relay' && data.relay) reply(await cloud.request(session.id, data.relay));
           else if (data.action === 'memory' && data.memory) reply(await session.controller.memory(data.memory));
           else if (data.action === 'cancel') { session.controller.cancel(); reply(); }
           else if (data.action === 'clear') { session.controller.clear(); reply(); }
@@ -69,7 +86,7 @@ export function projectionChat(): Plugin {
           } else reply(undefined, 'Unknown chat action.');
         } catch (error) { reply(undefined, error instanceof Error ? error.message : 'Chat request failed.'); }
       });
-      server.httpServer?.once('close', () => { for (const socket of sessions.keys()) stop(socket); });
+      server.httpServer?.once('close', () => { for (const socket of sessions.keys()) stop(socket); void cloud.dispose(); });
     },
   };
 }

@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('projectionChat', {
   cancel: () => ipcRenderer.invoke('chat:cancel'),
   clear: () => ipcRenderer.invoke('chat:clear'),
   memory: request => ipcRenderer.invoke('chat:memory', request),
+  relay: action => ipcRenderer.invoke('chat:relay', action),
   subscribe: listener => {
     const handler = (_event, state) => listener(state);
     ipcRenderer.on('chat:state', handler);
