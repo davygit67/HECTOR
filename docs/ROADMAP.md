@@ -20,6 +20,9 @@ The first release is the full parity scope, not the basic mapper.
 
 ## Now: close out M1 (basic mapper) and capture
 
+- Review and merge `feat/youtube-ambient` (YouTube links and ambient backlight). If `feat/rams-design-system` merges first, re-style the two new controls in its design system; whichever lands second needs a rebase of `src/main.tsx`.
+- YouTube terms: confirm with the owner that mirroring the official embedded player onto projection surfaces fits the intended use under YouTube's API Services Terms. HECTOR never removes or skips YouTube's player UI or ads, and never downloads, but warping a mirrored player is a gray area for some uses.
+
 - Validate the studio Live view toggle on Windows/macOS: preview resources release while output continues, and preview resumes after repeated toggles. Desktop CI and manual qualification remain pending.
 
 - Re-run Windows/macOS CI to validate the loop-safe staging playback assertions; local Linux checks pass, desktop qualification still needs a supported display.
@@ -39,12 +42,13 @@ The first release is the full parity scope, not the basic mapper.
 ## M3: live sources
 
 - Screen/window capture: works on Windows. Remaining: macOS permission flow and interactive qualification, capture audio, behavior when the captured window is minimized, capture profiling, optional auto-reconnect after restart (currently explicit by design).
-- YouTube/live content through a sandboxed adapter that respects the service's terms.
+- YouTube: done through the official player and window capture (see ARCHITECTURE). Remaining: measure YouTube frame pacing and end-to-end latency; macOS Screen Recording flow; a clearer recovery path when the player window is minimized (currently a warning); measure audio/video offset between the player window and the projected image.
+- Other live content (HLS/DASH stream URLs, other services) is not started. Each service needs its own adapter that respects its terms; the YouTube link field rejects non-YouTube links.
 - Separate profiling for each source type: local media, capture, stream.
 
 ## M4: effects, generated content, ambient
 
-- Ambient/backlight driven by real sampled source colors, with no fabricated glow when a source is missing.
+- Ambient backlight: done, adapted from adknate05 (see THIRD_PARTY). Remaining: glow that follows ellipse and future polygon masks; glow that starts at the detected picture inside letterboxed sources; adknate05's room fill once a 3D room model exists; measure cost with several lit surfaces, fullscreen, and on a slower GPU.
 - Richer generated visuals, countdown timers, notes/recipe panels, target game. User content is data, never executable code.
 
 ## M5: AI assistant (optional drawer)
