@@ -38,6 +38,8 @@ For the personal prototype, check the actual signed-in email in both products be
 
 Create or select a runtime API key with Tunnels Read + Use. Enter it locally as `CONTROL_PLANE_API_KEY` through a secure secret input or your environment manager. Do not put a literal key in a command argument, task prompt, chat, committed file or screenshot. Do not give the long-running client an admin key. Do not assume the existing model API key has the required tunnel permissions.
 
+For a separate local credential, use the ignored `agent/.env.tunnel` file with `CONTROL_PLANE_API_KEY=...`. Edit it in an actual text editor; a file preview may be read-only. On macOS, `open -e agent/.env.tunnel` opens TextEdit. Keep the file private (mode 600) and leave the model key in `agent/.env` unchanged. If a key has been pasted into chat, replace it in Platform, update this local file, reconnect the runtime, verify status, and revoke the exposed key. Never paste the replacement into a chat.
+
 ## 3. Run the official tunnel client
 
 Download the current client through Platform tunnel settings or the release linked from [OpenAI's Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels). Choose the build for the projector computer; check the release digest. Keep downloaded binaries and local profiles in private ignored storage, such as `agent/.local-data/`.
@@ -61,6 +63,18 @@ Replace the ID and paths with the actual values. The profile references `env:CON
 
 The tunnel's stdio target has no additional OAuth flow. The proxy holds the private submit credential locally, while OpenAI tunnel/workspace permissions control who may reach its tools. Give tunnel access only to accounts/workspaces you intend to allow to change this room and read agent result text.
 
+### Restart an existing installation
+
+The relay and tunnel are separate processes. Start the relay as above and open Studio. Reuse the existing tunnel and profile; do not create a new plugin each time. Prefer the official client's managed `runtimes connect` workflow with the existing alias/profile, then inspect `runtimes status`.
+
+For a foreground troubleshooting session, after checking that no managed runtime for this profile is already running, the following loads the private key without putting it in command arguments. Run from the project root with a Node version supporting `--env-file`; replace the client version/profile with the installed ones:
+
+```sh
+node --env-file=agent/.env.tunnel -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync("./agent/.local-data/tunnel-client-v0.0.18/tunnel-client",["run","--profile-dir","agent/.local-data/tunnel-profiles","--profile","projection-mapper-chatgpt"],{stdio:"inherit",env:process.env}); process.exitCode=r.status ?? 1;'
+```
+
+Keep that terminal open, and select **Receive here** in Studio after any Studio reload. No login/startup service is installed by these steps. To rotate a runtime key, stop its existing runtime first and relaunch with the updated private file; an already-running process retains its old environment.
+
 ## 4. Add the tools to the cloud chat
 
 While both local processes are running, open **ChatGPT Plugins → Add custom MCP server → Connection: Tunnel**. Select the same tunnel, name the plugin Projection Mapper, and configure authentication to match the stdio target. Complete the product's access review. If the tunnel is missing, check its workspace association and your Read + Use permission.
@@ -68,6 +82,8 @@ While both local processes are running, open **ChatGPT Plugins → Add custom MC
 For Codex cloud, select the supported tunnel-backed MCP target in the calling product/environment. Do not copy the local `.env` into a cloud repository or assume a local app/CLI MCP entry travels to the cloud. Verify the tools are actually listed in the intended cloud task. If that environment offers no supported tunnel/plugin selection, it is not connected by these local steps; use a supported cloud surface or an authenticated hosted gateway.
 
 First make a read-only call: **“Use Projection Mapper to get the projector status.”** Confirm the expected installation ID, and then choose Receive here if needed. Next send one clearly identified test note and inspect its returned request ID with `get_projection_request`. Confirm the note in Studio. Physical projection requires checking the actual output separately.
+
+A Responses API test uses the calling Platform account's API balance, which is separate from ChatGPT access. An `insufficient_quota` / `credit_balance_exhausted` response does not prove a tunnel failure. Verify the installed plugin through ChatGPT itself, or add API credits only if you intend to use that API account. A discovered tool list proves discovery, not successful task delivery.
 
 ## 5. Tell individual scheduled tasks what to send
 
