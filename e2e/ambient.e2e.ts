@@ -23,13 +23,15 @@ async function expectGlow(h: Hector, page: Page) {
 }
 const expectDark = (h: Hector, page: Page) => expect.poll(async () => (await h.pixels(page, outside)).every(dark), { timeout: 5_000 }).toBe(true);
 
-async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeout: number) {
+async function expectGeneratorGlow(h: Hector, page: Page, points: Point[]) {
   let pixels: Rgb[] = [];
   try {
     await expect.poll(async () => {
       pixels = await h.pixels(page, points, true);
       return pixels.some(c => c.some(v => v > 12));
-    }, { timeout }).toBe(true);
+    // Hosted Windows capture can take longer than five seconds even when the returned pixels are lit.
+    // Keep polling the real pixels, allowing enough time for capture as well as worker startup.
+    }, { timeout: 30_000 }).toBe(true);
   } catch (cause) {
     const probe = await page.evaluate(() => {
       const snapshot = window.hectorProbe?.snapshot();
@@ -104,9 +106,9 @@ test('ambient settings persist, render on generators and track a moved surface',
     await h.updateSurface({ corners, ambient: settings });
     const output = await h.openOutput();
     // The default aurora gradient is a generator: its rendered frames are sampled like any other source.
-    await expectGeneratorGlow(h, output, outside, 10_000);
+    await expectGeneratorGlow(h, output, outside);
     await h.ok({ type: 'command', command: { type: 'surface.nudge', id: 'surface-1', corner: -1, dx: 0.1, dy: 0 } });
-    await expectGeneratorGlow(h, output, [[0.385, 0.5]], 5_000);
+    await expectGeneratorGlow(h, output, [[0.385, 0.5]]);
     await h.ok({ type: 'save' });
     const profile = h.profile; await h.close({ keepProfile: true });
     const restarted = await Hector.launch({ profile });
