@@ -23,6 +23,19 @@ async function expectGlow(h: Hector, page: Page) {
 }
 const expectDark = (h: Hector, page: Page) => expect.poll(async () => (await h.pixels(page, outside)).every(dark), { timeout: 5_000 }).toBe(true);
 
+async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeout: number) {
+  let pixels: Rgb[] = [];
+  try {
+    await expect.poll(async () => {
+      pixels = await h.pixels(page, points);
+      return pixels.some(c => !dark(c));
+    }, { timeout }).toBe(true);
+  } catch (cause) {
+    const probe = await page.evaluate(() => window.hectorProbe?.snapshot());
+    throw new Error(`Generator glow missing: ${JSON.stringify({ points, pixels, probe, errors: h.errors })}`, { cause });
+  }
+}
+
 test('ambient backlight lights the wall from the source edges, staged until Apply, independent per window', async () => {
   const h = await Hector.launch();
   try {
@@ -88,9 +101,9 @@ test('ambient settings persist, render on generators and track a moved surface',
     await h.updateSurface({ corners, ambient: settings });
     const output = await h.openOutput();
     // The default aurora gradient is a generator: its rendered frames are sampled like any other source.
-    await expect.poll(async () => (await h.pixels(output, outside)).some(c => !dark(c)), { timeout: 10_000 }).toBe(true);
+    await expectGeneratorGlow(h, output, outside, 10_000);
     await h.ok({ type: 'command', command: { type: 'surface.nudge', id: 'surface-1', corner: -1, dx: 0.1, dy: 0 } });
-    await expect.poll(async () => (await h.pixels(output, [[0.385, 0.5]]))[0].some(v => v > 12), { timeout: 5_000 }).toBe(true);
+    await expectGeneratorGlow(h, output, [[0.385, 0.5]], 5_000);
     await h.ok({ type: 'save' });
     const profile = h.profile; await h.close({ keepProfile: true });
     const restarted = await Hector.launch({ profile });
@@ -101,3 +114,4 @@ test('ambient settings persist, render on generators and track a moved surface',
     } finally { await restarted.close(); }
   } finally { await h.close(); }
 });
+
