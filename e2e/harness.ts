@@ -14,6 +14,7 @@ export const fullFrame: Surface['corners'] = [[0, 0], [1, 0], [1, 1], [0, 1]];
 export class Hector {
   output: Page | null = null;
   readonly errors: string[] = [];
+  pixelCaptureStage = 'idle';
   /** Console errors matching these are expected by the current test (for example a deliberately missing file). */
   readonly expectedErrors: RegExp[] = [];
   private constructor(readonly app: ElectronApplication, readonly studio: Page, readonly profile: string, private ownsProfile: boolean) {}
@@ -87,14 +88,18 @@ export class Hector {
   /** Average RGB around normalized points of a window's projection canvas, from a real screenshot. */
   async pixels(page: Page, points: Point[]): Promise<Rgb[]> {
     const canvas = page.locator('canvas.projection');
+    this.pixelCaptureStage = 'scroll';
     await canvas.scrollIntoViewIfNeeded();
+    this.pixelCaptureStage = 'bounds';
     const bounds = await canvas.boundingBox();
     if (!bounds) throw new Error('Projection canvas is not visible.');
     const rect = { x: Math.floor(bounds.x), y: Math.floor(bounds.y), width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) };
     // Capture the composited Electron page directly. Chromium's DevTools screenshot path can stall on
     // continuously animated WebGL canvases on Windows even while the renderer and ambient worker are healthy.
+    this.pixelCaptureStage = 'window';
     const window = await this.app.browserWindow(page);
-    return window.evaluate(async (window, { rect, points }) => {
+    this.pixelCaptureStage = 'capture';
+    const result = await window.evaluate(async (window, { rect, points }) => {
       const image = (await window.webContents.capturePage(rect)).resize({ width: 480 });
       const { width, height } = image.getSize(), bitmap = image.toBitmap();
       return points.map(([x, y]) => {
@@ -104,6 +109,9 @@ export class Hector {
         return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)] as [number, number, number];
       });
     }, { rect, points });
+    this.pixelCaptureStage = 'complete';
+    await window.dispose();
+    return result;
   }
 }
 

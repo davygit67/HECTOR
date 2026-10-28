@@ -35,7 +35,7 @@ async function expectGeneratorGlow(h: Hector, page: Page, points: Point[], timeo
       const snapshot = window.hectorProbe?.snapshot();
       return snapshot && { frames: snapshot.frames, ambient: snapshot.ambient };
     });
-    throw new Error(`Generator glow missing: ${JSON.stringify({ points, pixels, probe, errors: h.errors })}`, { cause });
+    throw new Error(`Generator glow missing: ${JSON.stringify({ points, pixels, captureStage: h.pixelCaptureStage, probe, errors: h.errors })}`, { cause });
   }
 }
 
