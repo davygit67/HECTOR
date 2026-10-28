@@ -1,5 +1,15 @@
 # Agent task status
 
+## Cloud delivery verification — October 28
+
+User explicitly authorized a temporary ChatGPT test chat. Opened the existing plugin's Try in chat and selected Temporary chat. A real get_projector_status call correctly found receiver offline and did not submit. Local service checks confirmed the official managed tunnel process_running/healthy/ready alltrue and Studio HTTP200. The retained Studio tab had a stale connection; used its Reconnect button, then Receive here, preserving Scene4193/Geometry6.
+
+The browser retry reached a one-time publish_task_update approval. No Always allow or permanent permission change was made. Safari was concurrently in use; a stale control click was rejected by automatic review, then refreshed state safely located the test. A subsequent UI timeout reset the browser controller and the user continued switching windows. Stopped trying to control Safari. The Projection Mapper connector became available directly in this chat; get_projector_status returned deviceOnline true, then its publish_task_update sent the exact authorized test using the same stable request ID. No local HTTP submission was used for this test.
+
+Cloud get_projection_request returned complete. Studio independently shows the existing note updated to title "Cloud connection verified" and matching summary, Scene4194/Geometry6; tabletop timer and back-wall video remain, with three total assets. The software path cloud connector → private tunnel → inbox → existing spatial agent → Studio is verified. Physical output remains projectionVerified:false. The browser test may remain at its pending approval; a later identical call with the same request ID deduplicates instead of creating another note. No separate schedule or all-task completion hook was created. Unattended scheduler approval behavior remains to be qualified. No Platform credits purchased, key rotation or account permission expansion.
+
+Studio remains on Surface layout + AI with Receiving here active; saved proof is /private/tmp/projection-cloud-delivery-verified.png. Reloading requires Receive here again. Prior source tests remain applicable; no application source changed. Clean idle guarded sync was up-to-date before these agent-owned documentation edits. Publish only agent/CHATGPT_CONNECTION.md, coordination/README.md and this status; release the publication hold after their commit/push.
+
 ## ChatGPT / Codex cloud connection — plugin connected October 27; cloud invocation pending
 
 The user's supplied tunnel key is saved only in ignored agent/.env.tunnel with mode600; agent/.env's existing model key is unchanged. Do not print either file, include credentials in diagnostics, or commit runtime/profile/room data. The user was advised to replace the chat-exposed key after setup. The actual writable-editor procedure and restart/rotation instructions are in agent/CHATGPT_CONNECTION.md. Key revocation/rotation is not yet performed.

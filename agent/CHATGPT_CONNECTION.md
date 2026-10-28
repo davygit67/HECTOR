@@ -85,6 +85,8 @@ First make a read-only call: **“Use Projection Mapper to get the projector sta
 
 A Responses API test uses the calling Platform account's API balance, which is separate from ChatGPT access. An `insufficient_quota` / `credit_balance_exhausted` response does not prove a tunnel failure. Verify the installed plugin through ChatGPT itself, or add API credits only if you intend to use that API account. A discovered tool list proves discovery, not successful task delivery.
 
+The October 28 interactive connection test passed through the installed Projection Mapper cloud connector: status → publish task update → completed receipt, with the matching note visible in Studio. The browser test also successfully read status and presented a one-time write approval. **Allow once** is sufficient for an interactive test; it does not establish unattended scheduling permission. Reconnect Studio and select Receive here if status says the receiver is offline. This verifies software delivery, not physical projector output.
+
 ## 5. Tell individual scheduled tasks what to send
 
 Connecting the plugin does not subscribe to every cloud task's completion. Enable it in each desired chat/task and add an explicit completion instruction. For example:
