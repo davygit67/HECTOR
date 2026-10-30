@@ -9,6 +9,19 @@ Applies to the whole repository. The user's current instructions win on conflict
 - [projection-mapper](https://github.com/adknate05/projection-mapper) and [FREEkMapper](https://github.com/v-prgmr/FREEkMapper) are behavioral references only. Never copy, fork, merge, import or clone their code, assets or history.
   - One exception, authorized by the repository owner: the ambient backlight code in `src/ambient/` is adapted from adknate05's code on the `codex/nate-projection-mapper` branch, with attribution. See `docs/THIRD_PARTY.md`. The exception covers that supplied code only, not the rest of that branch and not third-party code.
 
+## Nector integration exception
+
+The repository owner authorized a deliberate integration of the user-owned HECTOR and
+Projection Mapper implementations on branch `Nector` on 2026-10-30.  For that branch
+only, selected first-party source from HECTOR commit
+`6bd610a33939f91dc7feec9834d7cbbb7cc0d067` and Projection Mapper commit
+`912f609aabfaef130c6e5b52e07747e9b01d0460` may be adapted under the source map in
+`docs/INTEGRATION.md`.  This is not authorization for a whole-tree merge, a history
+merge, an import of FREEkMapper, or reuse of any third-party material beyond its
+existing license and attribution terms. Preserve source attribution, keep the two
+original branches intact, and add behavior and migration tests before replacing a
+working implementation.
+
 ## Workflow
 
 - Inspect `git status` first and preserve unrelated work. Work on a feature branch, never directly on `main`. Never force-push.

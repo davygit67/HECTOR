@@ -8,13 +8,31 @@ This is the single list of outstanding work, blockers and next steps. Other docu
 
 The first release is the full parity scope, not the basic mapper.
 
+## Nector integration branch
+
+`Nector` begins from HECTOR main commit `6bd610a` and deliberately integrates the
+user-owned Projection Mapper snapshot `912f609a`, which has no common Git ancestor.
+It is not a whole-tree or history merge. The source map, phase gates, ownership
+boundaries, and current evidence are in [INTEGRATION.md](INTEGRATION.md). The existing
+HECTOR milestones below remain behavior obligations until their replacement passes the
+same or stronger tests.
+
+The first implementation gate is the existing Android projector's minimum playback and
+device-contract slice. Its actual capability, memory, decoder, thermal, reconnect, and
+blackout evidence determines whether the player remains a shared WebView renderer or
+needs a native GLES/media adapter. Do not port the full Studio workload to that device
+before this gate passes.
+
 ## Branches
 
-`main` contains the app. Make subsequent changes on feature branches and submit them for review.
+`main` contains the app. Make subsequent changes on feature branches and submit them for review. `Nector` is the
+isolated integration branch; do not merge unrelated histories into it.
 
 ## Blockers
 
-- **PR review and CI:** review [PR #4](https://github.com/davygit67/HECTOR/pull/4) and confirm its latest Windows/macOS checks before merging. The first combined-branch run was inspected; macOS artifacts are available. See [QUALIFICATION.md](QUALIFICATION.md) for the Windows screenshot-wait diagnosis and the capture-harness change.
+- **CI variability:** HECTOR main at `6bd610a` includes PR #4. Preserve and investigate the three reported
+  Windows smoke failures (2x media speed, output-window timeout, and canvas screenshot stability); do not dismiss
+  them as harmless flakiness. See [QUALIFICATION.md](QUALIFICATION.md).
 - **macOS interactive evidence:** CI evidence exists, but an interactive run by a tester on macOS is still needed (see [QUALIFICATION.md](QUALIFICATION.md#testing-on-macos)).
 - **Hardware:** no projector or second display has been tested on either OS.
 
