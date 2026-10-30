@@ -13,7 +13,8 @@
 .file-actions { display: flex; gap: 2px; margin-left: auto; }
 
 /* Staging: mode, state and the commit action, read left to right */
-.stagebar { display: flex; align-items: center; gap: var(--s4); height: 50px; padding: 0 var(--s5); border-bottom: 1px solid var(--line); flex: none; }
+.stagebar { display: flex; align-items: center; gap: var(--s4); height: 42px; padding: 0 var(--s5); border-bottom: 1px solid var(--line); flex: none; }
+.autosave { color: var(--ink-3); font-size: 12px; }
 .lamps { display: flex; gap: var(--s4); }
 .stage-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .stage-actions .primary { margin-left: var(--s3); min-width: 120px; }
@@ -24,6 +25,10 @@
 .right-panel { border-left: 1px solid var(--line); width: 300px; }
 .panel-body { flex: 1; min-height: 0; overflow: auto; padding: var(--s4); }
 .panel-body > .note:last-child { margin-top: var(--s5); }
+.assistant-launch { display: flex; align-items: center; justify-content: space-between; width: calc(100% - var(--s4) * 2); height: 56px; margin: var(--s3) var(--s4); padding: 0 var(--s3); border-color: var(--signal); background: var(--signal-wash); text-align: left; }
+.assistant-launch b, .assistant-launch small { display: block; }
+.assistant-launch b { font-size: 13px; }
+.assistant-launch small { margin-top: 2px; color: var(--ink-3); font-size: 10px; font-weight: 400; }
 
 /* Library: layers */
 .layer-list { display: flex; flex-direction: column; gap: 2px; }
@@ -64,6 +69,11 @@
 .link-form { display: flex; gap: 6px; margin-bottom: var(--s3); }
 .link-form input { flex: 1; }
 .link-form input[aria-invalid=true] { border-color: var(--signal); }
+.content-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); margin-bottom: var(--s5); }
+.content-tile { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; height: 70px; padding: var(--s3); text-align: left; white-space: normal; }
+.content-tile b { font-size: 12px; }
+.content-tile small { color: var(--ink-3); font-size: 10px; font-weight: 400; }
+.content-tile.add-service { border-style: dashed; }
 
 /* Library: setups */
 .setups-form { display: flex; flex-direction: column; gap: var(--s2); margin: var(--s4) 0 var(--s5); }
@@ -103,6 +113,8 @@
 .corner-grid { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 6px; align-items: center; }
 .corner-grid .label { text-align: center; }
 .corner-grid input { height: 28px; }
+.corner-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: var(--s3); }
+.corner-actions button { height: 26px; padding: 0 6px; font-size: 11px; }
 .corner-index { width: 30px; height: 28px; padding: 0; font-variant-numeric: tabular-nums; }
 .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .keys.pair { grid-template-columns: 1fr 1fr; margin-top: var(--s2); }
@@ -116,9 +128,10 @@
 .field .segmented { justify-self: start; }
 
 /* Operation deck: immediate controls, distinct from staged edits */
-.console { display: flex; align-items: center; gap: var(--s4); height: 72px; padding: 0 var(--s5); border-top: 1px solid var(--line); background: var(--paper); flex: none; }
+.console { display: flex; align-items: center; gap: var(--s4); height: 58px; padding: 0 var(--s5); border-top: 1px solid var(--line); background: var(--paper); flex: none; }
 .deck { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .output-deck { margin-left: auto; }
+.integrations-deck { gap: var(--s3); }
 .deck-state .label { white-space: nowrap; }
 .deck-state { display: flex; flex-direction: column; gap: 5px; min-width: 132px; margin-right: var(--s2); }
 .deck-state .lamp { font-size: inherit; color: inherit; gap: 9px; }

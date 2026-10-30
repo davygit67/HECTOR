@@ -69,17 +69,37 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('surface.move'), id: idSchema, direction: z.union([z.literal(-1), z.literal(1)]) }).strict(),
   z.object({ type: z.literal('source.put'), source: sourceSchema }).strict(),
   z.object({ type: z.literal('source.remove'), id: idSchema }).strict(),
+  z.object({ type: z.literal('scene.clear') }).strict(),
   z.object({ type: z.literal('scene.rename'), name: z.string().min(1).max(160) }).strict()
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export function initialScene(): Scene {
   return { version: 1, name: 'Untitled setup', width: 1920, height: 1080,
     sources: [{ id: 'aurora', name: 'Aurora gradient', kind: 'gradient', color: '#8f72ff', loop: true, speed: 1, volume: 0 }],
-    surfaces: [newSurface('surface-1', 'Surface 01', 'aurora')] };
+    surfaces: [newSurface('surface-1', 'Wall 01', 'aurora')] };
 }
 export function newSurface(id: string, name: string, sourceId: string | null): Surface {
   return { id, name, sourceId, corners: [[0.15, 0.15], [0.85, 0.15], [0.85, 0.85], [0.15, 0.85]], visible: true, locked: false,
     opacity: 1, brightness: 1, saturation: 1, crop: [0, 0, 0, 0], mask: 'none', group: '' };
+}
+/** Make one quad corner orthogonal using the X value on its vertical edge and the Y value on its horizontal edge. */
+export function squareCorner(corners: Surface['corners'], index: number): Surface['corners'] {
+  if (!Number.isInteger(index) || index < 0 || index > 3) throw new Error('Choose a valid corner.');
+  const vertical = [3, 2, 1, 0][index], horizontal = [1, 0, 3, 2][index], next = structuredClone(corners);
+  next[index] = [corners[vertical][0], corners[horizontal][1]];
+  return next;
+}
+/**
+ * Resize a quad from the corner diagonally opposite the handle. Independent X/Y
+ * factors preserve the box's edge relationships while allowing natural width and
+ * height resizing from a single corner.
+ */
+export function scaleFromOppositeCorner(corners: Surface['corners'], index: number, target: Point): Surface['corners'] {
+  if (!Number.isInteger(index) || index < 0 || index > 3) throw new Error('Choose a valid corner.');
+  const anchor = corners[(index + 2) % 4], original = corners[index];
+  const sx = Math.abs(original[0] - anchor[0]) < 1e-8 ? 1 : (target[0] - anchor[0]) / (original[0] - anchor[0]);
+  const sy = Math.abs(original[1] - anchor[1]) < 1e-8 ? 1 : (target[1] - anchor[1]) / (original[1] - anchor[1]);
+  return corners.map(c => [anchor[0] + (c[0] - anchor[0]) * sx, anchor[1] + (c[1] - anchor[1]) * sy]) as Surface['corners'];
 }
 export function reduceScene(scene: Scene, raw: unknown): Scene {
   const command = commandSchema.parse(raw), next = structuredClone(scene);
@@ -116,6 +136,7 @@ export function reduceScene(scene: Scene, raw: unknown): Scene {
       break;
     }
     case 'source.remove': next.sources = next.sources.filter(s => s.id !== command.id); next.surfaces.forEach(s => { if (s.sourceId === command.id) s.sourceId = null; }); break;
+    case 'scene.clear': next.sources = []; next.surfaces = []; break;
     case 'scene.rename': next.name = command.name; break;
   }
   return sceneSchema.parse(next);

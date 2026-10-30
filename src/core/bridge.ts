@@ -19,7 +19,7 @@ export interface Snapshot {
   players: Record<string, PlayerStatus>; setups: string[];
   platform: string; captureAccess: CaptureAccess;
 }
-export type Request =
+export type Request = (
   | { type: 'command'; command: Command }
   | { type: 'undo' | 'redo' | 'discard' | 'save' | 'apply' | 'import' | 'open' | 'export' | 'capture.sources' }
   | { type: 'mode'; mode: EditMode; resolution?: 'apply' | 'discard' | 'cancel' }
@@ -31,7 +31,7 @@ export type Request =
   | { type: 'youtube.add'; link: string }
   | { type: 'youtube.reload' | 'youtube.show'; sourceId: string }
   | { type: 'setup.save'; name: string }
-  | { type: 'setup.load'; name: string };
+  | { type: 'setup.load'; name: string }) & { /** Studio-only: persist and publish this edit. */ autoSave?: boolean };
 export interface RequestResult { ok: boolean; error?: string; choices?: CaptureChoice[] }
 export interface Bridge {
   snapshot(): Promise<Snapshot>;

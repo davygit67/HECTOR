@@ -21,7 +21,7 @@ test('corner and surface dragging, fine drag, convexity guard, lock, nudge, rota
     await expect.poll(async () => (await corners())[0][0]).toBeCloseTo(0.15 + 60 / svg.width, 2);
     expect((await corners())[0][1]).toBeCloseTo(0.15 + 30 / svg.height, 2);
     expect((await corners())[2]).toEqual([0.85, 0.85]);
-    expect((await h.snapshot(output)).session.applied).toEqual(applied);
+    expect((await h.snapshot(output)).session.applied.surfaces[0].corners[0][0]).toBeCloseTo(0.15 + 60 / svg.width, 2);
 
     // Surface drag moves every corner by the same amount.
     const before = await corners();
@@ -67,13 +67,13 @@ test('corner and surface dragging, fine drag, convexity guard, lock, nudge, rota
     expect(centroid(await corners())[0]).toBeCloseTo(centroid(scaled)[0], 5);
 
     // Locked surfaces cannot be dragged or nudged.
-    await page.getByRole('button', { name: 'Lock Surface 01' }).click();
+    await page.getByRole('button', { name: 'Lock Wall 01' }).click();
     await expect.poll(async () => (await h.draft()).surfaces[0].locked).toBe(true);
     const locked = await corners(); start = await handleCenter(0);
     await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(start.x + 50, start.y + 50, { steps: 4 }); await page.mouse.up();
     await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(300);
     expect(await corners()).toEqual(locked);
-    expect((await h.snapshot(output)).session.applied).toEqual(applied);
+    expect((await h.snapshot(output)).session.applied.surfaces[0].locked).toBe(true);
     h.expectNoErrors();
   } finally { await h.close(); }
 });
@@ -90,20 +90,17 @@ test('undo and redo through buttons and shortcuts follow the editing mode', asyn
     await page.keyboard.press('Control+Shift+z'); await expect.poll(opacity).toBe(0.6);
     await page.getByRole('button', { name: 'Redo', exact: true }).click(); await expect.poll(opacity).toBe(0.4);
     await expect(page.getByRole('button', { name: 'Redo', exact: true })).toBeDisabled();
-    expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(1);
+    expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.4);
     // A text field keeps its own undo: Ctrl+Z inside it does not touch the scene.
     await page.getByLabel('Project name').focus(); await page.keyboard.press('Control+z');
     await page.waitForTimeout(200); expect(await opacity()).toBe(0.4);
 
-    await h.ok({ type: 'mode', mode: 'live', resolution: 'apply' });
     await h.updateSurface({ opacity: 0.2 });
     expect((await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.2);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(async () => (await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.4);
     await page.keyboard.press('Control+Shift+z');
     await expect.poll(async () => (await h.snapshot(output)).session.applied.surfaces[0].opacity).toBe(0.2);
-    // Discard only exists for pending Preview changes; in Live it stays disabled.
-    await expect(page.getByRole('button', { name: 'Discard' })).toBeDisabled();
     h.expectNoErrors();
   } finally { await h.close(); }
 });

@@ -41,7 +41,7 @@ async function expectGeneratorGlow(h: Hector, page: Page, points: Point[]) {
   }
 }
 
-test('ambient backlight lights the wall from the source edges, staged until Apply, independent per window', async () => {
+test('ambient backlight lights the wall from the source edges and publishes immediately', async () => {
   const h = await Hector.launch();
   try {
     const [image] = await h.importFiles([fixtures.quadrants]);
@@ -51,7 +51,7 @@ test('ambient backlight lights the wall from the source edges, staged until Appl
     await expect.poll(async () => (await h.media(output, image.id))?.width ?? 0).toBe(640);
     await expectDark(h, output);
 
-    // Preview & Apply: the draft glows in the studio while the projector stays unchanged.
+    // Studio edits save and publish after the durable write succeeds.
     await h.studio.getByRole('button', { name: 'Effects', exact: true }).click();
     // The switch draws over its visually hidden checkbox, so click it the way a user does.
     await h.studio.locator('label.switch', { hasText: 'Ambient backlight' }).click();
@@ -59,10 +59,7 @@ test('ambient backlight lights the wall from the source edges, staged until Appl
     await expect.poll(async () => (await h.draft()).surfaces[0].ambient?.enabled).toBe(true);
     await h.updateSurface({ ambient: lit });
     await expectGlow(h, h.studio);
-    await expectDark(h, output);
-    expect((await h.applied()).surfaces[0].ambient).toBeUndefined();
-    expect(await ambient(h, output)).toEqual([]);
-
+    await expectGlow(h, output);
     await h.ok({ type: 'apply' });
     await expectGlow(h, output);
     const [probe] = await ambient(h, output);
@@ -89,7 +86,7 @@ test('ambient backlight lights the wall from the source edges, staged until Appl
     await h.ok({ type: 'undo' });
     await expectGlow(h, output);
 
-    // Undo/redo follow Live Edit.
+    // Undo/redo publish through the same automatic path.
     await h.updateSurface({ ambient: { ...lit, enabled: false } });
     await expectDark(h, output);
     await h.ok({ type: 'undo' }); await expectGlow(h, output);

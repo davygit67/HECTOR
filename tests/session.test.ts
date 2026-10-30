@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SceneSession } from '../src/core/session';
-import { initialScene, newSurface, reduceScene, sceneSchema } from '../src/core/model';
+import { initialScene, newSurface, reduceScene, scaleFromOppositeCorner, sceneSchema, squareCorner } from '../src/core/model';
 const rename = (name: string) => ({ type: 'scene.rename', name });
 describe('draft / applied / saved state', () => {
   it('isolates draft edits until persistence succeeds', async () => {
@@ -57,6 +57,10 @@ describe('draft / applied / saved state', () => {
     expect(() => reduceScene(scene, { type: 'surface.add', surface: newSurface('surface-1','Duplicate',null) })).toThrow();
     expect(() => reduceScene(scene, { type: 'surface.update', id: 'surface-1', patch: { crop: [.7,0,.4,0] } })).toThrow();
   });
+  it('clears a room canvas through the same undoable command path', () => {
+    const cleared = reduceScene(initialScene(), { type: 'scene.clear' });
+    expect(cleared.name).toBe('Untitled setup'); expect(cleared.surfaces).toEqual([]); expect(cleared.sources).toEqual([]);
+  });
 });
 describe('asset reachability', () => {
   const video = (assetId: string) => ({ type: 'source.put', source: { id: 'clip', assetId, kind: 'video', name: 'clip.mp4', color: '#8f72ff', loop: true, speed: 1, volume: 0 } });
@@ -89,5 +93,15 @@ describe('relative surface commands', () => {
   });
   it('rejects a nudge that would fold the quad', () => {
     expect(() => reduceScene(initialScene(), { type: 'surface.nudge', id: 'surface-1', corner: 0, dx: 0.9, dy: 0 })).toThrow();
+  });
+  it('squares corners from their adjacent edge coordinates and resizes from the opposite anchor', () => {
+    const corners: [[number, number], [number, number], [number, number], [number, number]] = [[.1, .2], [.8, .25], [.75, .9], [.2, .85]];
+    expect(squareCorner(corners, 0)[0]).toEqual([.2, .25]);
+    expect(squareCorner(corners, 2)[2]).toEqual([.8, .85]);
+    const resized = scaleFromOppositeCorner([[.2, .2], [.8, .2], [.8, .8], [.2, .8]], 0, [.1, .1]);
+    expect(resized[0][0]).toBeCloseTo(.1); expect(resized[0][1]).toBeCloseTo(.1);
+    expect(resized[1][0]).toBeCloseTo(.8); expect(resized[1][1]).toBeCloseTo(.1);
+    expect(resized[3][0]).toBeCloseTo(.1); expect(resized[3][1]).toBeCloseTo(.8);
+    expect(resized[2]).toEqual([.8, .8]);
   });
 });

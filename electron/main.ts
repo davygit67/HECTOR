@@ -178,7 +178,8 @@ async function listCaptureSources(): Promise<CaptureChoice[]> {
   });
 }
 async function handle(raw: unknown): Promise<RequestResult> {
-  const request = requestSchema.parse(raw);
+  const { autoSave = false, ...requestPayload } = z.object({ autoSave: z.boolean().optional() }).passthrough().parse(raw);
+  const request = requestSchema.parse(requestPayload);
   // Emergency/transport controls remain available during disk operations.
   if (request.type === 'blackout') { blackout = request.value; broadcast(); return { ok: true }; }
   if (request.type === 'transport') {
@@ -199,13 +200,17 @@ async function handle(raw: unknown): Promise<RequestResult> {
   if (operation) throw new Error('Wait for the current file operation to finish.');
   operation = true;
   try {
+    // Nector deliberately publishes project edits only after their durable write
+    // succeeds. The session still keeps draft/applied state internally so a failed
+    // write leaves the currently projected scene intact and reports the error.
+    let persistImmediately = false;
     switch (request.type) {
       case 'command': {
         if (request.command.type === 'source.put') checkGrants(request.command.source);
-        controller.command(request.command); break;
+        controller.command(request.command); persistImmediately = autoSave; break;
       }
-      case 'undo': controller.undo(); break;
-      case 'redo': controller.redo(); break;
+      case 'undo': controller.undo(); persistImmediately = autoSave; break;
+      case 'redo': controller.redo(); persistImmediately = autoSave; break;
       case 'discard': controller.discard(); break;
       case 'save': await controller.save(); break;
       case 'apply': await controller.save(true); break;
@@ -223,7 +228,7 @@ async function handle(raw: unknown): Promise<RequestResult> {
           const source: Source = { id: randomUUID(), assetId, kind: mediaKind, name: basename(path), color: '#8f72ff', loop: true, speed: 1, volume: 0 };
           controller.command({ type: 'source.put', source });
         }
-        break;
+        persistImmediately = autoSave; break;
       }
       case 'relink': {
         if (!assets.has(request.assetId)) throw new Error('Unknown asset.');
@@ -232,13 +237,13 @@ async function handle(raw: unknown): Promise<RequestResult> {
         const next = structuredClone(controller.draft); let replaced = false;
         for (const source of next.sources) if (source.assetId === request.assetId) { if (source.kind !== mediaKind) throw new Error('Relink requires the same media type.'); source.assetId = newId; replaced = true; }
         if (!replaced) throw new Error('Asset is not in the draft.');
-        assets.set(newId, path); controller.stage(next); break;
+        assets.set(newId, path); controller.stage(next); persistImmediately = autoSave; break;
       }
       case 'youtube.add': {
         const link = parseYouTubeLink(request.link); if (!link.ok) throw new Error(link.error);
         if (controller.draft.sources.length >= 64) throw new Error('Maximum 64 sources per project.');
         controller.command({ type: 'source.put', source: { id: randomUUID(), kind: 'youtube', name: `YouTube · ${link.videoId}`, videoId: link.videoId, start: link.start, color: '#8f72ff', loop: false, speed: 1, volume: 0 } });
-        break;
+        persistImmediately = autoSave; break;
       }
       case 'capture.add': {
         const choice = captureChoices.get(request.sourceId);
@@ -253,11 +258,11 @@ async function handle(raw: unknown): Promise<RequestResult> {
           if (next.sources.length >= 64) throw new Error('Maximum 64 sources per project.');
           next.sources.push({ id: randomUUID(), kind: 'capture', captureId, name: choice.name, color: '#8f72ff', loop: true, speed: 1, volume: 0 });
         }
-        captures.set(captureId, { ...choice, desktopId: request.sourceId }); controller.stage(next); break;
+        captures.set(captureId, { ...choice, desktopId: request.sourceId }); controller.stage(next); persistImmediately = autoSave; break;
       }
       case 'open': {
         const result = await dialog.showOpenDialog(studio!, { properties: ['openFile'], filters: [{ name: 'HECTOR project', extensions: ['json'] }] });
-        if (!result.canceled) await stageFile(result.filePaths[0]); break;
+        if (!result.canceled) { await stageFile(result.filePaths[0]); persistImmediately = autoSave; } break;
       }
       case 'export': {
         const result = await dialog.showSaveDialog(studio!, { defaultPath: `${controller.draft.name}.hector.json`, filters: [{ name: 'HECTOR project', extensions: ['json'] }] });
@@ -283,8 +288,9 @@ async function handle(raw: unknown): Promise<RequestResult> {
         await atomicWrite(join(dataPath(), 'setups', request.name + '.json'), document(controller.draft));
         setupNames = (await readdir(join(dataPath(), 'setups'))).filter(n => n.endsWith('.json')).map(n => n.slice(0, -5)); break;
       }
-      case 'setup.load': await stageFile(join(dataPath(), 'setups', request.name + '.json')); break;
+      case 'setup.load': await stageFile(join(dataPath(), 'setups', request.name + '.json')); persistImmediately = autoSave; break;
     }
+    if (persistImmediately) await controller.save(true);
     return { ok: true };
   } finally { operation = false; pruneGrants(); broadcast(); }
 }
